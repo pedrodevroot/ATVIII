@@ -1,0 +1,18 @@
+package com.autobots.automanager.dtos;
+
+import javax.validation.constraints.NotBlank;
+import javax.validation.constraints.Pattern;
+
+import lombok.Data;
+
+@Data
+public class TelefoneCadastroDto {
+
+    @NotBlank(message = "O DDD e obrigatorio")
+    @Pattern(regexp = "[0-9]{2}", message = "O DDD deve conter exatamente 2 digitos")
+    private String ddd;
+
+    @NotBlank(message = "O numero do telefone e obrigatorio")
+    @Pattern(regexp = "[0-9]{8,9}", message = "O numero do telefone deve conter 8 ou 9 digitos")
+    private String numero;
+}

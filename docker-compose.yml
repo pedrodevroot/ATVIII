@@ -1,0 +1,45 @@
+name: autobots
+
+services:
+
+  # Banco de dados compartilhado pelos microsservicos do AutoBots.
+  postgres:
+    image: postgres:16-alpine
+    container_name: autobots-postgres
+    environment:
+      POSTGRES_DB: autobots
+      POSTGRES_USER: autobots
+      POSTGRES_PASSWORD: autobots
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-dados:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U autobots -d autobots"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - autobots-rede
+
+  # Microsservico 1: cadastro de clientes.
+  cadastro-cliente:
+    build: .
+    image: autobots/cadastro-cliente:1.0
+    container_name: autobots-cadastro-cliente
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+    ports:
+      - "18080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - autobots-rede
+
+volumes:
+  postgres-dados:
+
+networks:
+  autobots-rede:
