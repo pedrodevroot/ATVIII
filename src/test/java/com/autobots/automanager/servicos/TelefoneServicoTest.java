@@ -17,11 +17,11 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import com.autobots.automanager.entidades.Cliente;
+import com.autobots.automanager.entidades.Usuario;
 import com.autobots.automanager.entidades.Telefone;
 import com.autobots.automanager.excecoes.RecursoNaoEncontradoException;
 import com.autobots.automanager.modelo.TelefoneAtualizador;
-import com.autobots.automanager.repositorios.ClienteRepositorio;
+import com.autobots.automanager.repositorios.UsuarioRepositorio;
 import com.autobots.automanager.repositorios.TelefoneRepositorio;
 
 @ExtendWith(MockitoExtension.class)
@@ -30,7 +30,7 @@ class TelefoneServicoTest {
     @Mock
     private TelefoneRepositorio repositorio;
     @Mock
-    private ClienteRepositorio clienteRepositorio;
+    private UsuarioRepositorio usuarioRepositorio;
     @Mock
     private TelefoneAtualizador atualizador;
 
@@ -45,42 +45,42 @@ class TelefoneServicoTest {
         return telefone;
     }
 
-    private Cliente clienteComTelefone(Telefone telefone) {
-        Cliente cliente = new Cliente();
-        cliente.setId(1L);
-        cliente.setNome("Maria");
+    private Usuario usuarioComTelefone(Telefone telefone) {
+        Usuario usuario = new Usuario();
+        usuario.setId(1L);
+        usuario.setNome("Maria");
         if (telefone != null) {
-            cliente.getTelefones().add(telefone);
+            usuario.getTelefones().add(telefone);
         }
-        return cliente;
+        return usuario;
     }
 
     @Test
-    @DisplayName("listarPorCliente: devolve os telefones do cliente")
-    void listarPorCliente() {
+    @DisplayName("listarPorUsuario: devolve os telefones do usuario")
+    void listarPorUsuario() {
         Telefone existente = telefone(1L, "21", "981234576");
-        when(clienteRepositorio.findById(1L)).thenReturn(Optional.of(clienteComTelefone(existente)));
+        when(usuarioRepositorio.findById(1L)).thenReturn(Optional.of(usuarioComTelefone(existente)));
 
-        assertEquals(1, servico.listarPorCliente(1L).size());
-        assertSame(existente, servico.listarPorCliente(1L).get(0));
+        assertEquals(1, servico.listarPorUsuario(1L).size());
+        assertSame(existente, servico.listarPorUsuario(1L).get(0));
     }
 
     @Test
-    @DisplayName("listarPorCliente: lanca RecursoNaoEncontrado quando o cliente nao existe")
-    void listarPorClienteInexistente() {
-        when(clienteRepositorio.findById(999L)).thenReturn(Optional.empty());
+    @DisplayName("listarPorUsuario: lanca RecursoNaoEncontrado quando o usuario nao existe")
+    void listarPorUsuarioInexistente() {
+        when(usuarioRepositorio.findById(999L)).thenReturn(Optional.empty());
 
         RecursoNaoEncontradoException excecao = assertThrows(
-                RecursoNaoEncontradoException.class, () -> servico.listarPorCliente(999L));
+                RecursoNaoEncontradoException.class, () -> servico.listarPorUsuario(999L));
 
-        assertEquals("Cliente de id 999 nao foi encontrado", excecao.getMessage());
+        assertEquals("Usuario de id 999 nao foi encontrado", excecao.getMessage());
     }
 
     @Test
-    @DisplayName("criar: persiste o telefone e o vincula ao cliente")
-    void criarVinculaAoCliente() {
-        Cliente cliente = clienteComTelefone(null);
-        when(clienteRepositorio.findById(1L)).thenReturn(Optional.of(cliente));
+    @DisplayName("criar: persiste o telefone e o vincula ao usuario")
+    void criarVinculaAoUsuario() {
+        Usuario usuario = usuarioComTelefone(null);
+        when(usuarioRepositorio.findById(1L)).thenReturn(Optional.of(usuario));
         when(repositorio.save(any(Telefone.class))).thenAnswer(chamada -> {
             Telefone argumento = chamada.getArgument(0);
             argumento.setId(99L);
@@ -90,16 +90,16 @@ class TelefoneServicoTest {
         Telefone criado = servico.criar(1L, telefone(null, "13", "981234567"));
 
         assertEquals(99L, criado.getId());
-        assertEquals(1, cliente.getTelefones().size());
-        assertSame(criado, cliente.getTelefones().get(0));
-        verify(clienteRepositorio).save(cliente);
+        assertEquals(1, usuario.getTelefones().size());
+        assertSame(criado, usuario.getTelefones().get(0));
+        verify(usuarioRepositorio).save(usuario);
     }
 
     @Test
     @DisplayName("criar: zera um id enviado, para que o telefone seja sempre novo")
     void criarZeraId() {
-        Cliente cliente = clienteComTelefone(null);
-        when(clienteRepositorio.findById(1L)).thenReturn(Optional.of(cliente));
+        Usuario usuario = usuarioComTelefone(null);
+        when(usuarioRepositorio.findById(1L)).thenReturn(Optional.of(usuario));
         when(repositorio.save(any(Telefone.class))).thenAnswer(chamada -> {
             Telefone argumento = chamada.getArgument(0);
             assertEquals(null, argumento.getId());
@@ -113,9 +113,9 @@ class TelefoneServicoTest {
     }
 
     @Test
-    @DisplayName("criar: lanca RecursoNaoEncontrado quando o cliente nao existe")
-    void criarClienteInexistente() {
-        when(clienteRepositorio.findById(999L)).thenReturn(Optional.empty());
+    @DisplayName("criar: lanca RecursoNaoEncontrado quando o usuario nao existe")
+    void criarUsuarioInexistente() {
+        when(usuarioRepositorio.findById(999L)).thenReturn(Optional.empty());
 
         assertThrows(RecursoNaoEncontradoException.class,
                 () -> servico.criar(999L, telefone(null, "13", "981234567")));

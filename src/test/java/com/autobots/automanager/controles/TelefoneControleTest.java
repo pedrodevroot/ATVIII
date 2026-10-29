@@ -51,12 +51,12 @@ class TelefoneControleTest {
     }
 
     @Test
-    @DisplayName("GET /cliente/{id}/telefones: 200 com a lista")
+    @DisplayName("GET /usuario/{id}/telefones: 200 com a lista")
     void listarOk() throws Exception {
-        when(servico.listarPorCliente(1L))
+        when(servico.listarPorUsuario(1L))
                 .thenReturn(List.of(telefone(1L, "21", "981234576")));
 
-        requisicao.perform(get("/cliente/1/telefones"))
+        requisicao.perform(get("/usuario/1/telefones"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].id").value(1))
@@ -64,18 +64,18 @@ class TelefoneControleTest {
     }
 
     @Test
-    @DisplayName("GET /cliente/{id}/telefones: 404 quando o cliente nao existe")
-    void listarClienteInexistente() throws Exception {
-        when(servico.listarPorCliente(999L))
-                .thenThrow(new RecursoNaoEncontradoException("Cliente", 999L));
+    @DisplayName("GET /usuario/{id}/telefones: 404 quando o usuario nao existe")
+    void listarUsuarioInexistente() throws Exception {
+        when(servico.listarPorUsuario(999L))
+                .thenThrow(new RecursoNaoEncontradoException("Usuario", 999L));
 
-        requisicao.perform(get("/cliente/999/telefones"))
+        requisicao.perform(get("/usuario/999/telefones"))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.mensagem").value("Cliente de id 999 nao foi encontrado"));
+                .andExpect(jsonPath("$.mensagem").value("Usuario de id 999 nao foi encontrado"));
     }
 
     @Test
-    @DisplayName("POST /cliente/{id}/telefones: 201 com header Location")
+    @DisplayName("POST /usuario/{id}/telefones: 201 com header Location")
     void criarOk() throws Exception {
         when(servico.criar(anyLong(), any(Telefone.class)))
                 .thenReturn(telefone(5L, "13", "981234567"));
@@ -84,7 +84,7 @@ class TelefoneControleTest {
                 { "ddd": "13", "numero": "981234567" }
                 """;
 
-        requisicao.perform(post("/cliente/1/telefones")
+        requisicao.perform(post("/usuario/1/telefones")
                 .contentType(MediaType.APPLICATION_JSON).content(corpo))
                 .andExpect(status().isCreated())
                 .andExpect(header().string("Location", "/telefone/5"))
@@ -92,28 +92,28 @@ class TelefoneControleTest {
     }
 
     @Test
-    @DisplayName("POST /cliente/{id}/telefones: 404 quando o cliente nao existe")
-    void criarClienteInexistente() throws Exception {
+    @DisplayName("POST /usuario/{id}/telefones: 404 quando o usuario nao existe")
+    void criarUsuarioInexistente() throws Exception {
         when(servico.criar(anyLong(), any(Telefone.class)))
-                .thenThrow(new RecursoNaoEncontradoException("Cliente", 999L));
+                .thenThrow(new RecursoNaoEncontradoException("Usuario", 999L));
 
         String corpo = """
                 { "ddd": "13", "numero": "981234567" }
                 """;
 
-        requisicao.perform(post("/cliente/999/telefones")
+        requisicao.perform(post("/usuario/999/telefones")
                 .contentType(MediaType.APPLICATION_JSON).content(corpo))
                 .andExpect(status().isNotFound());
     }
 
     @Test
-    @DisplayName("POST /cliente/{id}/telefones: 400 quando ddd e numero sao invalidos")
+    @DisplayName("POST /usuario/{id}/telefones: 400 quando ddd e numero sao invalidos")
     void criarInvalido() throws Exception {
         String corpo = """
                 { "ddd": "1", "numero": "abc" }
                 """;
 
-        requisicao.perform(post("/cliente/1/telefones")
+        requisicao.perform(post("/usuario/1/telefones")
                 .contentType(MediaType.APPLICATION_JSON).content(corpo))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.erros[*].campo", hasItem("ddd")))
@@ -123,13 +123,13 @@ class TelefoneControleTest {
     }
 
     @Test
-    @DisplayName("POST /cliente/{id}/telefones: 400 quando o ddd nao e informado")
+    @DisplayName("POST /usuario/{id}/telefones: 400 quando o ddd nao e informado")
     void criarSemDdd() throws Exception {
         String corpo = """
                 { "numero": "981234567" }
                 """;
 
-        requisicao.perform(post("/cliente/1/telefones")
+        requisicao.perform(post("/usuario/1/telefones")
                 .contentType(MediaType.APPLICATION_JSON).content(corpo))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.erros[*].campo", hasItem("ddd")));
@@ -235,12 +235,12 @@ class TelefoneControleTest {
     }
 
     @Test
-    @DisplayName("GET /cliente/{id}/telefones: link self em cada telefone da lista")
+    @DisplayName("GET /usuario/{id}/telefones: link self em cada telefone da lista")
     void listarComLinks() throws Exception {
-        when(servico.listarPorCliente(1L))
+        when(servico.listarPorUsuario(1L))
                 .thenReturn(List.of(telefone(1L, "21", "981234576"), telefone(2L, "13", "981234567")));
 
-        requisicao.perform(get("/cliente/1/telefones"))
+        requisicao.perform(get("/usuario/1/telefones"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].links[0].rel").value("self"))
                 .andExpect(jsonPath("$[0].links[0].href").value("http://localhost/telefone/1"))
@@ -249,7 +249,7 @@ class TelefoneControleTest {
     }
 
     @Test
-    @DisplayName("POST /cliente/{id}/telefones: resposta com link self do telefone criado")
+    @DisplayName("POST /usuario/{id}/telefones: resposta com link self do telefone criado")
     void criarComLinks() throws Exception {
         when(servico.criar(anyLong(), any(Telefone.class)))
                 .thenReturn(telefone(5L, "13", "981234567"));
@@ -258,7 +258,7 @@ class TelefoneControleTest {
                 { "ddd": "13", "numero": "981234567" }
                 """;
 
-        requisicao.perform(post("/cliente/1/telefones")
+        requisicao.perform(post("/usuario/1/telefones")
                 .contentType(MediaType.APPLICATION_JSON).content(corpo))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$._links.self.href").value("http://localhost/telefone/5"));

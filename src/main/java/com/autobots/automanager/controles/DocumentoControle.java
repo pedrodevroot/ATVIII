@@ -33,17 +33,17 @@ public class DocumentoControle {
     @Autowired
     private AdicionadorLinkDocumento adicionadorLink;
 
-    @GetMapping("/cliente/{clienteId}/documentos")
-    public ResponseEntity<List<DocumentoDto>> obterDocumentos(@PathVariable long clienteId) {
-        List<DocumentoDto> resposta = conversor.paraResposta(servico.listarPorCliente(clienteId));
+    @GetMapping("/usuario/{usuarioId}/documentos")
+    public ResponseEntity<List<DocumentoDto>> obterDocumentos(@PathVariable long usuarioId) {
+        List<DocumentoDto> resposta = conversor.paraResposta(servico.listarPorUsuario(usuarioId));
         adicionadorLink.adicionarLink(resposta);
         return ResponseEntity.ok(resposta);
     }
 
-    @PostMapping("/cliente/{clienteId}/documentos")
-    public ResponseEntity<DocumentoDto> cadastrarDocumento(@PathVariable long clienteId,
+    @PostMapping("/usuario/{usuarioId}/documentos")
+    public ResponseEntity<DocumentoDto> cadastrarDocumento(@PathVariable long usuarioId,
             @Valid @RequestBody DocumentoCadastroDto dto) {
-        Documento criado = servico.criar(clienteId, conversor.paraEntidade(dto));
+        Documento criado = servico.criar(usuarioId, conversor.paraEntidade(dto));
         DocumentoDto resposta = conversor.paraResposta(criado);
         adicionadorLink.adicionarLink(resposta);
         return ResponseEntity.created(URI.create("/documento/" + criado.getId()))

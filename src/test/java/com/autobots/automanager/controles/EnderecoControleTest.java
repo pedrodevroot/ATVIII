@@ -15,8 +15,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import java.util.List;
-
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,6 +26,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import com.autobots.automanager.conversores.EnderecoConversor;
 import com.autobots.automanager.entidades.Endereco;
+import com.autobots.automanager.excecoes.ConflitoException;
 import com.autobots.automanager.excecoes.RecursoNaoEncontradoException;
 import com.autobots.automanager.modelo.AdicionadorLinkEndereco;
 import com.autobots.automanager.servicos.EnderecoServico;
@@ -55,31 +54,58 @@ class EnderecoControleTest {
     }
 
     @Test
-    @DisplayName("GET /cliente/{id}/enderecos: 200 com a lista")
-    void listarOk() throws Exception {
-        when(servico.listarPorCliente(1L))
-                .thenReturn(List.of(endereco(3L, "Santos"), endereco(4L, "Rio de Janeiro")));
+    @DisplayName("GET /usuario/{id}/endereco: 200 com o endereco do usuario e link self")
+    void obterDoUsuarioOk() throws Exception {
+        when(servico.obterPorUsuario(1L)).thenReturn(endereco(3L, "Santos"));
 
-        requisicao.perform(get("/cliente/1/enderecos"))
+        requisicao.perform(get("/usuario/1/endereco"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(2))
-                .andExpect(jsonPath("$[0].cidade").value("Santos"))
-                .andExpect(jsonPath("$[1].cidade").value("Rio de Janeiro"));
+                .andExpect(jsonPath("$.id").value(3))
+                .andExpect(jsonPath("$.cidade").value("Santos"))
+                .andExpect(jsonPath("$._links.self.href").value("http://localhost/endereco/3"));
     }
 
     @Test
-    @DisplayName("GET /cliente/{id}/enderecos: 404 quando o cliente nao existe")
-    void listarClienteInexistente() throws Exception {
-        when(servico.listarPorCliente(999L))
-                .thenThrow(new RecursoNaoEncontradoException("Cliente", 999L));
+    @DisplayName("GET /usuario/{id}/endereco: 404 quando o usuario nao tem endereco")
+    void obterDoUsuarioSemEndereco() throws Exception {
+        when(servico.obterPorUsuario(1L))
+                .thenThrow(new RecursoNaoEncontradoException("O usuario de id 1 nao possui endereco"));
 
-        requisicao.perform(get("/cliente/999/enderecos"))
+        requisicao.perform(get("/usuario/1/endereco"))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.mensagem").value("Cliente de id 999 nao foi encontrado"));
+                .andExpect(jsonPath("$.mensagem").value("O usuario de id 1 nao possui endereco"));
     }
 
     @Test
-    @DisplayName("POST /cliente/{id}/enderecos: 201 com header Location")
+    @DisplayName("GET /usuario/{id}/endereco: 404 quando o usuario nao existe")
+    void obterDoUsuarioInexistente() throws Exception {
+        when(servico.obterPorUsuario(999L))
+                .thenThrow(new RecursoNaoEncontradoException("Usuario", 999L));
+
+        requisicao.perform(get("/usuario/999/endereco"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.mensagem").value("Usuario de id 999 nao foi encontrado"));
+    }
+
+    @Test
+    @DisplayName("POST /usuario/{id}/endereco: 409 quando o usuario ja tem endereco")
+    void criarSegundoEndereco() throws Exception {
+        when(servico.criar(anyLong(), any(Endereco.class))).thenThrow(new ConflitoException(
+                "O usuario de id 1 ja possui endereco. Para altera-lo, use PUT /endereco/3"));
+
+        String corpo = """
+                { "cidade": "Santos", "rua": "Rua XV", "numero": "1" }
+                """;
+
+        requisicao.perform(post("/usuario/1/endereco")
+                .contentType(MediaType.APPLICATION_JSON).content(corpo))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.mensagem")
+                        .value("O usuario de id 1 ja possui endereco. Para altera-lo, use PUT /endereco/3"));
+    }
+
+    @Test
+    @DisplayName("POST /usuario/{id}/endereco: 201 com header Location")
     void criarOk() throws Exception {
         when(servico.criar(anyLong(), any(Endereco.class))).thenReturn(endereco(5L, "Santos"));
 
@@ -94,7 +120,7 @@ class EnderecoControleTest {
                 }
                 """;
 
-        requisicao.perform(post("/cliente/1/enderecos")
+        requisicao.perform(post("/usuario/1/endereco")
                 .contentType(MediaType.APPLICATION_JSON).content(corpo))
                 .andExpect(status().isCreated())
                 .andExpect(header().string("Location", "/endereco/5"))
@@ -102,28 +128,28 @@ class EnderecoControleTest {
     }
 
     @Test
-    @DisplayName("POST /cliente/{id}/enderecos: 404 quando o cliente nao existe")
-    void criarClienteInexistente() throws Exception {
+    @DisplayName("POST /usuario/{id}/endereco: 404 quando o usuario nao existe")
+    void criarUsuarioInexistente() throws Exception {
         when(servico.criar(anyLong(), any(Endereco.class)))
-                .thenThrow(new RecursoNaoEncontradoException("Cliente", 999L));
+                .thenThrow(new RecursoNaoEncontradoException("Usuario", 999L));
 
         String corpo = """
                 { "cidade": "Santos", "rua": "Rua XV", "numero": "1" }
                 """;
 
-        requisicao.perform(post("/cliente/999/enderecos")
+        requisicao.perform(post("/usuario/999/endereco")
                 .contentType(MediaType.APPLICATION_JSON).content(corpo))
                 .andExpect(status().isNotFound());
     }
 
     @Test
-    @DisplayName("POST /cliente/{id}/enderecos: 400 quando cidade, rua ou numero faltam")
+    @DisplayName("POST /usuario/{id}/endereco: 400 quando cidade, rua ou numero faltam")
     void criarIncompleto() throws Exception {
         String corpo = """
                 { "bairro": "Centro" }
                 """;
 
-        requisicao.perform(post("/cliente/1/enderecos")
+        requisicao.perform(post("/usuario/1/endereco")
                 .contentType(MediaType.APPLICATION_JSON).content(corpo))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.erros[*].campo", hasItem("cidade")))
@@ -134,13 +160,13 @@ class EnderecoControleTest {
     }
 
     @Test
-    @DisplayName("POST /cliente/{id}/enderecos: 400 quando o codigo postal nao tem 8 digitos")
+    @DisplayName("POST /usuario/{id}/endereco: 400 quando o codigo postal nao tem 8 digitos")
     void criarCodigoPostalInvalido() throws Exception {
         String corpo = """
                 { "cidade": "Santos", "rua": "Rua XV", "numero": "1", "codigoPostal": "123" }
                 """;
 
-        requisicao.perform(post("/cliente/1/enderecos")
+        requisicao.perform(post("/usuario/1/endereco")
                 .contentType(MediaType.APPLICATION_JSON).content(corpo))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.erros[*].campo", hasItem("codigoPostal")));
@@ -247,21 +273,7 @@ class EnderecoControleTest {
     }
 
     @Test
-    @DisplayName("GET /cliente/{id}/enderecos: link self em cada endereco da lista")
-    void listarComLinks() throws Exception {
-        when(servico.listarPorCliente(1L))
-                .thenReturn(List.of(endereco(3L, "Santos"), endereco(4L, "Rio de Janeiro")));
-
-        requisicao.perform(get("/cliente/1/enderecos"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].links[0].rel").value("self"))
-                .andExpect(jsonPath("$[0].links[0].href").value("http://localhost/endereco/3"))
-                .andExpect(jsonPath("$[1].links[0].rel").value("self"))
-                .andExpect(jsonPath("$[1].links[0].href").value("http://localhost/endereco/4"));
-    }
-
-    @Test
-    @DisplayName("POST /cliente/{id}/enderecos: resposta com link self do endereco criado")
+    @DisplayName("POST /usuario/{id}/endereco: resposta com link self do endereco criado")
     void criarComLinks() throws Exception {
         when(servico.criar(anyLong(), any(Endereco.class))).thenReturn(endereco(5L, "Santos"));
 
@@ -269,7 +281,7 @@ class EnderecoControleTest {
                 { "cidade": "Santos", "rua": "Avenida Ana Costa", "numero": "250" }
                 """;
 
-        requisicao.perform(post("/cliente/1/enderecos")
+        requisicao.perform(post("/usuario/1/endereco")
                 .contentType(MediaType.APPLICATION_JSON).content(corpo))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$._links.self.href").value("http://localhost/endereco/5"));

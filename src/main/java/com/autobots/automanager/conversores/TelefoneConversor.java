@@ -27,6 +27,14 @@ public class TelefoneConversor {
         return telefone;
     }
 
+    public Telefone paraEntidade(TelefoneDto dto) {
+        Telefone telefone = new Telefone();
+        telefone.setId(dto.getId());
+        telefone.setDdd(dto.getDdd());
+        telefone.setNumero(dto.getNumero());
+        return telefone;
+    }
+
     public TelefoneDto paraResposta(Telefone telefone) {
         TelefoneDto dto = new TelefoneDto();
         dto.setId(telefone.getId());

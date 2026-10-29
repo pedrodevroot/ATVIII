@@ -2,11 +2,13 @@ package com.autobots.automanager.repositorios;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.math.BigInteger;
+import java.math.BigDecimal;
 import java.util.Calendar;
+import java.util.Date;
 import java.util.List;
 
 import org.junit.jupiter.api.DisplayName;
@@ -16,27 +18,44 @@ import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 import org.springframework.dao.DataIntegrityViolationException;
 
-import com.autobots.automanager.entidades.Cliente;
+import com.autobots.automanager.entidades.CredencialUsuarioSenha;
 import com.autobots.automanager.entidades.Documento;
+import com.autobots.automanager.entidades.Email;
+import com.autobots.automanager.entidades.Empresa;
 import com.autobots.automanager.entidades.Endereco;
+import com.autobots.automanager.entidades.Mercadoria;
+import com.autobots.automanager.entidades.Servico;
 import com.autobots.automanager.entidades.Telefone;
+import com.autobots.automanager.entidades.Usuario;
+import com.autobots.automanager.entidades.Veiculo;
+import com.autobots.automanager.entidades.Venda;
+import com.autobots.automanager.enumeracoes.PerfilUsuario;
+import com.autobots.automanager.enumeracoes.TipoDocumento;
+import com.autobots.automanager.enumeracoes.TipoVeiculo;
 
 @DataJpaTest
 class MapeamentoJpaTest {
 
     @Autowired
-    private ClienteRepositorio repositorio;
+    private UsuarioRepositorio repositorio;
+    @Autowired
+    private EmpresaRepositorio empresaRepositorio;
+    @Autowired
+    private VendaRepositorio vendaRepositorio;
+    @Autowired
+    private VeiculoRepositorio veiculoRepositorio;
     @Autowired
     private TestEntityManager gerenciador;
 
-    private Cliente clienteCompleto(String nome, String numeroDocumento) {
-        Cliente cliente = new Cliente();
-        cliente.setNome(nome);
-        cliente.setNomeSocial("Apelido");
+    private Usuario usuarioCompleto(String nome, String numeroDocumento) {
+        Usuario usuario = new Usuario();
+        usuario.setNome(nome);
+        usuario.setNomeSocial("Apelido");
         Calendar calendario = Calendar.getInstance();
         calendario.set(1995, Calendar.AUGUST, 20);
-        cliente.setDataNascimento(calendario.getTime());
-        cliente.setDataCadastro(Calendar.getInstance().getTime());
+        usuario.setDataNascimento(calendario.getTime());
+        usuario.setDataCadastro(Calendar.getInstance().getTime());
+        usuario.getPerfis().add(PerfilUsuario.CLIENTE);
 
         Endereco endereco = new Endereco();
         endereco.setEstado("Sao Paulo");
@@ -45,19 +64,54 @@ class MapeamentoJpaTest {
         endereco.setRua("Avenida Ana Costa");
         endereco.setNumero("250");
         endereco.setCodigoPostal("11060002");
-        cliente.getEnderecos().add(endereco);
+        usuario.setEndereco(endereco);
 
         Documento documento = new Documento();
-        documento.setTipo("RG");
+        documento.setTipo(TipoDocumento.RG);
         documento.setNumero(numeroDocumento);
-        cliente.getDocumentos().add(documento);
+        documento.setDataEmissao(new Date());
+        usuario.getDocumentos().add(documento);
 
         Telefone telefone = new Telefone();
         telefone.setDdd("13");
         telefone.setNumero("981234567");
-        cliente.getTelefones().add(telefone);
+        usuario.getTelefones().add(telefone);
 
-        return cliente;
+        Email email = new Email();
+        email.setEndereco(nome.replace(" ", "") + "@email.com");
+        usuario.getEmails().add(email);
+
+        CredencialUsuarioSenha credencial = new CredencialUsuarioSenha();
+        credencial.setNomeUsuario("login-" + numeroDocumento);
+        credencial.setSenha("segredo1");
+        credencial.setCriacao(new Date());
+        usuario.getCredenciais().add(credencial);
+
+        return usuario;
+    }
+
+    private Veiculo veiculo(Usuario dono, String placa) {
+        Veiculo veiculo = new Veiculo();
+        veiculo.setTipo(TipoVeiculo.SUV);
+        veiculo.setModelo("Corolla Cross");
+        veiculo.setPlaca(placa);
+        veiculo.setProprietario(dono);
+        dono.getVeiculos().add(veiculo);
+        return veiculo;
+    }
+
+    private Usuario usuarioSimples(String nome, PerfilUsuario perfil) {
+        Usuario usuario = new Usuario();
+        usuario.setNome(nome);
+        usuario.getPerfis().add(perfil);
+        return usuario;
+    }
+
+    private long contar(String tabela) {
+        Object total = gerenciador.getEntityManager()
+                .createNativeQuery("select count(*) from " + tabela)
+                .getSingleResult();
+        return ((Number) total).longValue();
     }
 
     private List<?> tabelas() {
@@ -68,41 +122,58 @@ class MapeamentoJpaTest {
     }
 
     @Test
-    @DisplayName("P13: o schema tem exatamente 4 tabelas, sem tabelas de juncao")
-    void schemaComQuatroTabelas() {
+    @DisplayName("o schema tem 16 tabelas: as 13 entidades, os perfis e as 2 juncoes da venda")
+    void schemaComDezesseisTabelas() {
         List<?> nomes = tabelas();
 
-        assertEquals(4, nomes.size(), "esperado 4 tabelas, encontrado: " + nomes);
-        assertTrue(nomes.contains("CLIENTE"));
-        assertTrue(nomes.contains("DOCUMENTO"));
-        assertTrue(nomes.contains("ENDERECO"));
-        assertTrue(nomes.contains("TELEFONE"));
+        assertEquals(16, nomes.size(), "esperado 16 tabelas, encontrado: " + nomes);
+        for (String tabela : List.of("USUARIO", "USUARIO_PERFIS", "EMPRESA", "ENDERECO", "TELEFONE",
+                "DOCUMENTO", "EMAIL", "CREDENCIAL", "CREDENCIAL_USUARIO_SENHA", "CREDENCIAL_CODIGO_BARRA",
+                "MERCADORIA", "SERVICO", "VEICULO", "VENDA", "VENDA_MERCADORIA", "VENDA_SERVICO")) {
+            assertTrue(nomes.contains(tabela), "faltou a tabela " + tabela);
+        }
     }
 
     @Test
-    @DisplayName("cascade: salvar o cliente persiste endereco, documentos e telefones")
+    @DisplayName("cascade: salvar o usuario persiste endereco, documentos, telefones, e-mails e credenciais")
     void cascadeAoSalvar() {
-        Cliente salvo = repositorio.saveAndFlush(clienteCompleto("Joana", "111111"));
+        Usuario salvo = repositorio.saveAndFlush(usuarioCompleto("Joana", "111111"));
         gerenciador.clear();
 
-        Cliente lido = repositorio.findById(salvo.getId()).orElseThrow();
+        Usuario lido = repositorio.findById(salvo.getId()).orElseThrow();
 
-        assertNotNull(lido.getEnderecos().get(0).getId());
-        assertEquals("Santos", lido.getEnderecos().get(0).getCidade());
+        assertNotNull(lido.getEndereco().getId());
+        assertEquals("Santos", lido.getEndereco().getCidade());
         assertEquals(1, lido.getDocumentos().size());
-        assertNotNull(lido.getDocumentos().get(0).getId());
         assertEquals(1, lido.getTelefones().size());
-        assertNotNull(lido.getTelefones().get(0).getId());
+        assertEquals(1, lido.getEmails().size());
+        assertEquals(1, lido.getCredenciais().size());
+        assertEquals(List.of(PerfilUsuario.CLIENTE), List.copyOf(lido.getPerfis()));
     }
 
     @Test
-    @DisplayName("P13: a FK cliente_id fica na tabela telefone e vem preenchida")
+    @DisplayName("heranca JOINED: a credencial volta do banco como a subclasse certa")
+    void credencialVoltaComoSubclasse() {
+        Usuario salvo = repositorio.saveAndFlush(usuarioCompleto("Joana", "121212"));
+        gerenciador.clear();
+
+        Usuario lido = repositorio.findById(salvo.getId()).orElseThrow();
+
+        CredencialUsuarioSenha credencial = (CredencialUsuarioSenha) lido.getCredenciais().get(0);
+        assertEquals("login-121212", credencial.getNomeUsuario());
+        assertEquals(1, contar("credencial"));
+        assertEquals(1, contar("credencial_usuario_senha"));
+        assertEquals(0, contar("credencial_codigo_barra"));
+    }
+
+    @Test
+    @DisplayName("a FK usuario_id fica na tabela telefone e vem preenchida")
     void fkNaTabelaFilha() {
-        Cliente salvo = repositorio.saveAndFlush(clienteCompleto("Joana", "222222"));
+        Usuario salvo = repositorio.saveAndFlush(usuarioCompleto("Joana", "222222"));
         Long idTelefone = salvo.getTelefones().get(0).getId();
 
         Object fk = gerenciador.getEntityManager()
-                .createNativeQuery("select cliente_id from telefone where id = :id")
+                .createNativeQuery("select usuario_id from telefone where id = :id")
                 .setParameter("id", idTelefone)
                 .getSingleResult();
 
@@ -110,128 +181,240 @@ class MapeamentoJpaTest {
     }
 
     @Test
+    @DisplayName("enum STRING: o banco grava o nome do valor, e nao a posicao")
+    void enumGravadoComoTexto() {
+        Usuario salvo = repositorio.saveAndFlush(usuarioCompleto("Joana", "232323"));
+
+        Object tipo = gerenciador.getEntityManager()
+                .createNativeQuery("select tipo from documento where id = :id")
+                .setParameter("id", salvo.getDocumentos().get(0).getId())
+                .getSingleResult();
+        Object perfil = gerenciador.getEntityManager()
+                .createNativeQuery("select perfis from usuario_perfis where usuario_id = :id")
+                .setParameter("id", salvo.getId())
+                .getSingleResult();
+
+        assertEquals("RG", tipo);
+        assertEquals("CLIENTE", perfil);
+    }
+
+    @Test
     @DisplayName("orphanRemoval: remover o telefone da colecao apaga a linha")
     void orphanRemovalDoTelefone() {
-        Cliente salvo = repositorio.saveAndFlush(clienteCompleto("Joana", "333333"));
+        Usuario salvo = repositorio.saveAndFlush(usuarioCompleto("Joana", "333333"));
 
         salvo.getTelefones().clear();
         repositorio.saveAndFlush(salvo);
         gerenciador.clear();
 
-        Object total = gerenciador.getEntityManager()
-                .createNativeQuery("select count(*) from telefone")
-                .getSingleResult();
-
-        assertEquals(0L, ((Number) total).longValue());
+        assertEquals(0, contar("telefone"));
     }
 
     @Test
-    @DisplayName("orphanRemoval: remover o endereco da colecao apaga a linha")
+    @DisplayName("orphanRemoval: desligar o endereco do usuario apaga a linha")
     void orphanRemovalDoEndereco() {
-        Cliente salvo = repositorio.saveAndFlush(clienteCompleto("Joana", "444444"));
+        Usuario salvo = repositorio.saveAndFlush(usuarioCompleto("Joana", "444444"));
 
-        salvo.getEnderecos().clear();
+        salvo.setEndereco(null);
         repositorio.saveAndFlush(salvo);
         gerenciador.clear();
 
-        Object total = gerenciador.getEntityManager()
-                .createNativeQuery("select count(*) from endereco")
-                .getSingleResult();
-
-        assertEquals(0L, ((Number) total).longValue());
+        assertEquals(0, contar("endereco"));
     }
 
     @Test
-    @DisplayName("cascade: excluir o cliente apaga endereco, documentos e telefones")
+    @DisplayName("cascade: excluir o usuario apaga endereco, documentos, telefones, e-mails, credenciais e veiculos")
     void cascadeAoExcluir() {
-        Cliente salvo = repositorio.saveAndFlush(clienteCompleto("Joana", "555555"));
+        Usuario usuario = usuarioCompleto("Joana", "555555");
+        veiculo(usuario, "ABC1D23");
+        Usuario salvo = repositorio.saveAndFlush(usuario);
 
         repositorio.delete(salvo);
         repositorio.flush();
         gerenciador.clear();
 
-        for (String tabela : List.of("cliente", "endereco", "documento", "telefone")) {
-            Object total = gerenciador.getEntityManager()
-                    .createNativeQuery("select count(*) from " + tabela)
-                    .getSingleResult();
-            assertEquals(0L, ((Number) total).longValue(), "tabela " + tabela + " nao ficou vazia");
+        for (String tabela : List.of("usuario", "usuario_perfis", "endereco", "documento", "telefone",
+                "email", "credencial", "credencial_usuario_senha", "veiculo")) {
+            assertEquals(0, contar(tabela), "tabela " + tabela + " nao ficou vazia");
         }
     }
 
     @Test
     @DisplayName("unique: dois documentos com o mesmo numero violam a restricao do banco")
     void numeroDeDocumentoEUnico() {
-        repositorio.saveAndFlush(clienteCompleto("Primeiro", "666666"));
+        repositorio.saveAndFlush(usuarioCompleto("Primeiro", "666666"));
 
-        assertThrows(DataIntegrityViolationException.class,
-                () -> repositorio.saveAndFlush(clienteCompleto("Segundo", "666666")));
+        Usuario segundo = usuarioCompleto("Segundo", "666666");
+        segundo.getCredenciais().clear();
+        assertThrows(DataIntegrityViolationException.class, () -> repositorio.saveAndFlush(segundo));
     }
 
     @Test
-    @DisplayName("findById: encontra o cliente e devolve vazio quando o id nao existe")
-    void findByIdEncontraOuDevolveVazio() {
-        Cliente salvo = repositorio.saveAndFlush(clienteCompleto("Joana", "777777"));
+    @DisplayName("unique: duas credenciais com o mesmo nome de usuario violam a restricao do banco")
+    void nomeDeUsuarioEUnico() {
+        repositorio.saveAndFlush(usuarioCompleto("Primeiro", "676767"));
 
-        assertTrue(repositorio.findById(salvo.getId()).isPresent());
-        assertTrue(repositorio.findById(999999L).isEmpty());
+        Usuario segundo = usuarioCompleto("Segundo", "686868");
+        ((CredencialUsuarioSenha) segundo.getCredenciais().get(0)).setNomeUsuario("login-676767");
+        assertThrows(DataIntegrityViolationException.class, () -> repositorio.saveAndFlush(segundo));
+    }
+
+    @Test
+    @DisplayName("unique: dois veiculos com a mesma placa violam a restricao do banco")
+    void placaEUnica() {
+        Usuario primeiro = usuarioSimples("Primeiro", PerfilUsuario.CLIENTE);
+        veiculo(primeiro, "ABC1D23");
+        repositorio.saveAndFlush(primeiro);
+
+        Usuario segundo = usuarioSimples("Segundo", PerfilUsuario.CLIENTE);
+        veiculo(segundo, "ABC1D23");
+        assertThrows(DataIntegrityViolationException.class, () -> repositorio.saveAndFlush(segundo));
     }
 
     @Test
     @DisplayName("IDENTITY: o id e gerado pelo banco a cada insercao")
     void idGeradoPeloBanco() {
-        Cliente primeiro = repositorio.saveAndFlush(clienteCompleto("Primeiro", "888888"));
-        Cliente segundo = repositorio.saveAndFlush(clienteCompleto("Segundo", "999999"));
+        Usuario primeiro = repositorio.saveAndFlush(usuarioCompleto("Primeiro", "888888"));
+        Usuario segundo = repositorio.saveAndFlush(usuarioCompleto("Segundo", "999999"));
 
         assertNotNull(primeiro.getId());
-        assertNotNull(segundo.getId());
         assertTrue(segundo.getId() > primeiro.getId());
     }
 
     @Test
-    @DisplayName("nullable: endereco sem cidade, rua ou numero viola a restricao do banco")
+    @DisplayName("nullable: endereco sem cidade viola a restricao do banco")
     void camposObrigatoriosDoEndereco() {
-        Cliente cliente = clienteCompleto("Joana", "101010");
-        cliente.getEnderecos().get(0).setCidade(null);
+        Usuario usuario = usuarioCompleto("Joana", "101010");
+        usuario.getEndereco().setCidade(null);
 
-        assertThrows(Exception.class, () -> repositorio.saveAndFlush(cliente));
+        assertThrows(Exception.class, () -> repositorio.saveAndFlush(usuario));
     }
 
     @Test
-    @DisplayName("count: reflete a quantidade de clientes inseridos")
-    void countReflete() {
-        assertEquals(0, repositorio.count());
-
-        repositorio.saveAndFlush(clienteCompleto("Primeiro", "121212"));
-        repositorio.saveAndFlush(clienteCompleto("Segundo", "131313"));
-
-        assertEquals(2, repositorio.count());
-        assertEquals(BigInteger.valueOf(2).longValue(), repositorio.count());
-    }
-
-    @Test
-    @DisplayName("P18: as colecoes filhas voltam do banco ordenadas por id")
+    @DisplayName("as colecoes filhas voltam do banco ordenadas por id")
     void colecoesOrdenadasPorId() {
-        Cliente cliente = clienteCompleto("Joana", "141414");
-
+        Usuario usuario = usuarioCompleto("Joana", "141414");
         Telefone segundo = new Telefone();
         segundo.setDdd("11");
         segundo.setNumero("999999999");
-        cliente.getTelefones().add(segundo);
+        usuario.getTelefones().add(segundo);
 
-        Endereco segundoEndereco = new Endereco();
-        segundoEndereco.setCidade("Rio de Janeiro");
-        segundoEndereco.setRua("Avenida Atlantica");
-        segundoEndereco.setNumero("1702");
-        cliente.getEnderecos().add(segundoEndereco);
-
-        Cliente salvo = repositorio.saveAndFlush(cliente);
+        Usuario salvo = repositorio.saveAndFlush(usuario);
         gerenciador.clear();
 
-        Cliente lido = repositorio.findById(salvo.getId()).orElseThrow();
+        Usuario lido = repositorio.findById(salvo.getId()).orElseThrow();
 
         assertEquals(2, lido.getTelefones().size());
         assertTrue(lido.getTelefones().get(0).getId() < lido.getTelefones().get(1).getId());
-        assertEquals(2, lido.getEnderecos().size());
-        assertTrue(lido.getEnderecos().get(0).getId() < lido.getEnderecos().get(1).getId());
+    }
+
+    @Test
+    @DisplayName("venda: o mesmo servico, a mesma mercadoria e o mesmo carro entram em duas vendas")
+    void mesmoItemEmDuasVendas() {
+        Usuario cliente = usuarioSimples("Cliente", PerfilUsuario.CLIENTE);
+        Veiculo carro = veiculo(cliente, "ABC1D23");
+        Usuario funcionario = usuarioSimples("Funcionario", PerfilUsuario.FUNCIONARIO);
+        repositorio.save(cliente);
+        repositorio.save(funcionario);
+
+        Empresa empresa = empresaCom(cliente, funcionario, carro, "V1", "V2");
+        empresaRepositorio.saveAndFlush(empresa);
+        gerenciador.clear();
+
+        assertEquals(2, vendaRepositorio.count());
+        assertEquals(2, contar("venda_servico"));
+        assertEquals(2, contar("venda_mercadoria"));
+        assertEquals(2, repositorio.findById(cliente.getId()).orElseThrow().getVendas().size());
+        assertEquals(2, veiculoRepositorio.findById(carro.getId()).orElseThrow().getVendas().size());
+        assertTrue(vendaRepositorio.existsByClienteIdOrFuncionarioId(funcionario.getId(), funcionario.getId()));
+    }
+
+    @Test
+    @DisplayName("excluir a empresa apaga as vendas e o catalogo dela, e mantem os usuarios desvinculados")
+    void excluirEmpresaMantemUsuarios() {
+        Usuario cliente = usuarioSimples("Cliente", PerfilUsuario.CLIENTE);
+        Veiculo carro = veiculo(cliente, "ABC1D23");
+        Usuario funcionario = usuarioSimples("Funcionario", PerfilUsuario.FUNCIONARIO);
+        repositorio.save(cliente);
+        repositorio.save(funcionario);
+        Empresa empresa = empresaRepositorio.saveAndFlush(empresaCom(cliente, funcionario, carro, "V1"));
+        gerenciador.clear();
+
+        empresaRepositorio.delete(empresaRepositorio.findById(empresa.getId()).orElseThrow());
+        empresaRepositorio.flush();
+        gerenciador.clear();
+
+        for (String tabela : List.of("empresa", "venda", "venda_servico", "venda_mercadoria",
+                "mercadoria", "servico")) {
+            assertEquals(0, contar(tabela), "tabela " + tabela + " nao ficou vazia");
+        }
+        assertEquals(2, repositorio.count());
+        assertEquals(1, contar("veiculo"));
+        Object vinculo = gerenciador.getEntityManager()
+                .createNativeQuery("select empresa_id from usuario where id = :id")
+                .setParameter("id", cliente.getId())
+                .getSingleResult();
+        assertNull(vinculo);
+    }
+
+    @Test
+    @DisplayName("excluir o fornecedor mantem a mercadoria no estoque, sem fornecedor")
+    void excluirFornecedorMantemMercadoria() {
+        Usuario fornecedor = usuarioSimples("Fornecedor", PerfilUsuario.FORNECEDOR);
+        repositorio.save(fornecedor);
+        Empresa empresa = new Empresa();
+        empresa.setRazaoSocial("Loja");
+        empresa.setCadastro(new Date());
+        Mercadoria roda = mercadoria();
+        empresa.getMercadorias().add(roda);
+        empresaRepositorio.save(empresa);
+        fornecedor.getMercadorias().add(roda);
+        repositorio.saveAndFlush(fornecedor);
+        gerenciador.clear();
+
+        repositorio.delete(repositorio.findById(fornecedor.getId()).orElseThrow());
+        repositorio.flush();
+        gerenciador.clear();
+
+        assertEquals(1, contar("mercadoria"));
+        Object vinculo = gerenciador.getEntityManager()
+                .createNativeQuery("select fornecedor_id from mercadoria").getSingleResult();
+        assertNull(vinculo);
+    }
+
+    private Mercadoria mercadoria() {
+        Mercadoria roda = new Mercadoria();
+        roda.setNome("Roda");
+        roda.setFabricacao(new Date());
+        roda.setCadastro(new Date());
+        roda.setQuantidade(10);
+        roda.setValor(new BigDecimal("300.00"));
+        return roda;
+    }
+
+    private Empresa empresaCom(Usuario cliente, Usuario funcionario, Veiculo carro, String... identificacoes) {
+        Empresa empresa = new Empresa();
+        empresa.setRazaoSocial("Loja");
+        empresa.setCadastro(new Date());
+        empresa.getUsuarios().add(cliente);
+        empresa.getUsuarios().add(funcionario);
+        Mercadoria roda = mercadoria();
+        Servico alinhamento = new Servico();
+        alinhamento.setNome("Alinhamento");
+        alinhamento.setValor(new BigDecimal("50.00"));
+        empresa.getMercadorias().add(roda);
+        empresa.getServicos().add(alinhamento);
+        for (String identificacao : identificacoes) {
+            Venda venda = new Venda();
+            venda.setIdentificacao(identificacao);
+            venda.setCadastro(new Date());
+            venda.setCliente(cliente);
+            venda.setFuncionario(funcionario);
+            venda.setVeiculo(carro);
+            venda.getMercadorias().add(roda);
+            venda.getServicos().add(alinhamento);
+            empresa.getVendas().add(venda);
+        }
+        return empresa;
     }
 }

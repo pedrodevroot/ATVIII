@@ -1,7 +1,6 @@
 package com.autobots.automanager.controles;
 
 import java.net.URI;
-import java.util.List;
 
 import javax.validation.Valid;
 
@@ -33,17 +32,17 @@ public class EnderecoControle {
     @Autowired
     private AdicionadorLinkEndereco adicionadorLink;
 
-    @GetMapping("/cliente/{clienteId}/enderecos")
-    public ResponseEntity<List<EnderecoDto>> obterEnderecos(@PathVariable long clienteId) {
-        List<EnderecoDto> resposta = conversor.paraResposta(servico.listarPorCliente(clienteId));
+    @GetMapping("/usuario/{usuarioId}/endereco")
+    public ResponseEntity<EnderecoDto> obterEnderecoDoUsuario(@PathVariable long usuarioId) {
+        EnderecoDto resposta = conversor.paraResposta(servico.obterPorUsuario(usuarioId));
         adicionadorLink.adicionarLink(resposta);
         return ResponseEntity.ok(resposta);
     }
 
-    @PostMapping("/cliente/{clienteId}/enderecos")
-    public ResponseEntity<EnderecoDto> cadastrarEndereco(@PathVariable long clienteId,
+    @PostMapping("/usuario/{usuarioId}/endereco")
+    public ResponseEntity<EnderecoDto> cadastrarEndereco(@PathVariable long usuarioId,
             @Valid @RequestBody EnderecoCadastroDto dto) {
-        Endereco criado = servico.criar(clienteId, conversor.paraEntidade(dto));
+        Endereco criado = servico.criar(usuarioId, conversor.paraEntidade(dto));
         EnderecoDto resposta = conversor.paraResposta(criado);
         adicionadorLink.adicionarLink(resposta);
         return ResponseEntity.created(URI.create("/endereco/" + criado.getId()))

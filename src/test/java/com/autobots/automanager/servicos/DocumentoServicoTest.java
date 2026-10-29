@@ -17,11 +17,12 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import com.autobots.automanager.entidades.Cliente;
+import com.autobots.automanager.entidades.Usuario;
+import com.autobots.automanager.enumeracoes.TipoDocumento;
 import com.autobots.automanager.entidades.Documento;
 import com.autobots.automanager.excecoes.RecursoNaoEncontradoException;
 import com.autobots.automanager.modelo.DocumentoAtualizador;
-import com.autobots.automanager.repositorios.ClienteRepositorio;
+import com.autobots.automanager.repositorios.UsuarioRepositorio;
 import com.autobots.automanager.repositorios.DocumentoRepositorio;
 
 @ExtendWith(MockitoExtension.class)
@@ -30,14 +31,14 @@ class DocumentoServicoTest {
     @Mock
     private DocumentoRepositorio repositorio;
     @Mock
-    private ClienteRepositorio clienteRepositorio;
+    private UsuarioRepositorio usuarioRepositorio;
     @Mock
     private DocumentoAtualizador atualizador;
 
     @InjectMocks
     private DocumentoServico servico;
 
-    private Documento documento(Long id, String tipo, String numero) {
+    private Documento documento(Long id, TipoDocumento tipo, String numero) {
         Documento documento = new Documento();
         documento.setId(id);
         documento.setTipo(tipo);
@@ -45,63 +46,63 @@ class DocumentoServicoTest {
         return documento;
     }
 
-    private Cliente clienteComDocumento(Documento documento) {
-        Cliente cliente = new Cliente();
-        cliente.setId(1L);
-        cliente.setNome("Maria");
+    private Usuario usuarioComDocumento(Documento documento) {
+        Usuario usuario = new Usuario();
+        usuario.setId(1L);
+        usuario.setNome("Maria");
         if (documento != null) {
-            cliente.getDocumentos().add(documento);
+            usuario.getDocumentos().add(documento);
         }
-        return cliente;
+        return usuario;
     }
 
     @Test
-    @DisplayName("listarPorCliente: devolve os documentos do cliente")
-    void listarPorCliente() {
-        Documento existente = documento(1L, "RG", "1500");
-        when(clienteRepositorio.findById(1L))
-                .thenReturn(Optional.of(clienteComDocumento(existente)));
+    @DisplayName("listarPorUsuario: devolve os documentos do usuario")
+    void listarPorUsuario() {
+        Documento existente = documento(1L, TipoDocumento.RG, "1500");
+        when(usuarioRepositorio.findById(1L))
+                .thenReturn(Optional.of(usuarioComDocumento(existente)));
 
-        assertEquals(1, servico.listarPorCliente(1L).size());
+        assertEquals(1, servico.listarPorUsuario(1L).size());
     }
 
     @Test
-    @DisplayName("listarPorCliente: lanca RecursoNaoEncontrado quando o cliente nao existe")
-    void listarPorClienteInexistente() {
-        when(clienteRepositorio.findById(999L)).thenReturn(Optional.empty());
+    @DisplayName("listarPorUsuario: lanca RecursoNaoEncontrado quando o usuario nao existe")
+    void listarPorUsuarioInexistente() {
+        when(usuarioRepositorio.findById(999L)).thenReturn(Optional.empty());
 
         RecursoNaoEncontradoException excecao = assertThrows(
-                RecursoNaoEncontradoException.class, () -> servico.listarPorCliente(999L));
+                RecursoNaoEncontradoException.class, () -> servico.listarPorUsuario(999L));
 
-        assertEquals("Cliente de id 999 nao foi encontrado", excecao.getMessage());
+        assertEquals("Usuario de id 999 nao foi encontrado", excecao.getMessage());
     }
 
     @Test
-    @DisplayName("criar: persiste o documento e o vincula ao cliente")
-    void criarVinculaAoCliente() {
-        Cliente cliente = clienteComDocumento(null);
-        when(clienteRepositorio.findById(1L)).thenReturn(Optional.of(cliente));
+    @DisplayName("criar: persiste o documento e o vincula ao usuario")
+    void criarVinculaAoUsuario() {
+        Usuario usuario = usuarioComDocumento(null);
+        when(usuarioRepositorio.findById(1L)).thenReturn(Optional.of(usuario));
         when(repositorio.save(any(Documento.class))).thenAnswer(chamada -> {
             Documento argumento = chamada.getArgument(0);
             argumento.setId(99L);
             return argumento;
         });
 
-        Documento criado = servico.criar(1L, documento(null, "CNH", "55443322"));
+        Documento criado = servico.criar(1L, documento(null, TipoDocumento.CNH, "55443322"));
 
         assertEquals(99L, criado.getId());
-        assertEquals(1, cliente.getDocumentos().size());
-        assertSame(criado, cliente.getDocumentos().get(0));
-        verify(clienteRepositorio).save(cliente);
+        assertEquals(1, usuario.getDocumentos().size());
+        assertSame(criado, usuario.getDocumentos().get(0));
+        verify(usuarioRepositorio).save(usuario);
     }
 
     @Test
-    @DisplayName("criar: lanca RecursoNaoEncontrado quando o cliente nao existe")
-    void criarClienteInexistente() {
-        when(clienteRepositorio.findById(999L)).thenReturn(Optional.empty());
+    @DisplayName("criar: lanca RecursoNaoEncontrado quando o usuario nao existe")
+    void criarUsuarioInexistente() {
+        when(usuarioRepositorio.findById(999L)).thenReturn(Optional.empty());
 
         assertThrows(RecursoNaoEncontradoException.class,
-                () -> servico.criar(999L, documento(null, "CNH", "111")));
+                () -> servico.criar(999L, documento(null, TipoDocumento.CNH, "111")));
 
         verify(repositorio, never()).save(any(Documento.class));
     }
@@ -109,7 +110,7 @@ class DocumentoServicoTest {
     @Test
     @DisplayName("obterPorId: devolve o documento encontrado")
     void obterPorId() {
-        Documento existente = documento(2L, "CPF", "00000000001");
+        Documento existente = documento(2L, TipoDocumento.CPF, "00000000001");
         when(repositorio.findById(2L)).thenReturn(Optional.of(existente));
 
         assertSame(existente, servico.obterPorId(2L));
@@ -129,8 +130,8 @@ class DocumentoServicoTest {
     @Test
     @DisplayName("atualizar: delega ao DocumentoAtualizador e salva")
     void atualizarDelegaAoAtualizador() {
-        Documento existente = documento(2L, "RG", "1500");
-        Documento atualizacao = documento(null, "CNH", null);
+        Documento existente = documento(2L, TipoDocumento.RG, "1500");
+        Documento atualizacao = documento(null, TipoDocumento.CNH, null);
         when(repositorio.findById(2L)).thenReturn(Optional.of(existente));
         when(repositorio.save(existente)).thenReturn(existente);
 
@@ -146,7 +147,7 @@ class DocumentoServicoTest {
         when(repositorio.findById(999L)).thenReturn(Optional.empty());
 
         assertThrows(RecursoNaoEncontradoException.class,
-                () -> servico.atualizar(999L, documento(null, "CNH", null)));
+                () -> servico.atualizar(999L, documento(null, TipoDocumento.CNH, null)));
 
         verify(repositorio, never()).save(any(Documento.class));
     }
@@ -154,7 +155,7 @@ class DocumentoServicoTest {
     @Test
     @DisplayName("excluir: remove o documento encontrado")
     void excluirExistente() {
-        Documento existente = documento(2L, "RG", "1500");
+        Documento existente = documento(2L, TipoDocumento.RG, "1500");
         when(repositorio.findById(2L)).thenReturn(Optional.of(existente));
 
         servico.excluir(2L);

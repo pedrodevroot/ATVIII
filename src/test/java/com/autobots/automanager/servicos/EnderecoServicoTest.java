@@ -1,6 +1,7 @@
 package com.autobots.automanager.servicos;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
@@ -17,12 +18,13 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import com.autobots.automanager.entidades.Cliente;
 import com.autobots.automanager.entidades.Endereco;
+import com.autobots.automanager.entidades.Usuario;
+import com.autobots.automanager.excecoes.ConflitoException;
 import com.autobots.automanager.excecoes.RecursoNaoEncontradoException;
 import com.autobots.automanager.modelo.EnderecoAtualizador;
-import com.autobots.automanager.repositorios.ClienteRepositorio;
 import com.autobots.automanager.repositorios.EnderecoRepositorio;
+import com.autobots.automanager.repositorios.UsuarioRepositorio;
 
 @ExtendWith(MockitoExtension.class)
 class EnderecoServicoTest {
@@ -30,7 +32,7 @@ class EnderecoServicoTest {
     @Mock
     private EnderecoRepositorio repositorio;
     @Mock
-    private ClienteRepositorio clienteRepositorio;
+    private UsuarioRepositorio usuarioRepositorio;
     @Mock
     private EnderecoAtualizador atualizador;
 
@@ -47,51 +49,50 @@ class EnderecoServicoTest {
         return endereco;
     }
 
-    private Cliente clienteComEndereco(Endereco endereco) {
-        Cliente cliente = new Cliente();
-        cliente.setId(1L);
-        cliente.setNome("Maria");
-        if (endereco != null) {
-            cliente.getEnderecos().add(endereco);
-        }
-        return cliente;
+    private Usuario usuarioComEndereco(Endereco endereco) {
+        Usuario usuario = new Usuario();
+        usuario.setId(1L);
+        usuario.setNome("Maria");
+        usuario.setEndereco(endereco);
+        return usuario;
     }
 
     @Test
-    @DisplayName("listarPorCliente: devolve os enderecos do cliente")
-    void listarPorCliente() {
+    @DisplayName("obterPorUsuario: devolve o endereco do usuario")
+    void obterPorUsuario() {
         Endereco existente = endereco(3L, "Santos");
-        when(clienteRepositorio.findById(1L))
-                .thenReturn(Optional.of(clienteComEndereco(existente)));
+        when(usuarioRepositorio.findById(1L)).thenReturn(Optional.of(usuarioComEndereco(existente)));
 
-        assertEquals(1, servico.listarPorCliente(1L).size());
-        assertSame(existente, servico.listarPorCliente(1L).get(0));
+        assertSame(existente, servico.obterPorUsuario(1L));
     }
 
     @Test
-    @DisplayName("listarPorCliente: devolve lista vazia quando o cliente nao tem endereco")
-    void listarPorClienteSemEndereco() {
-        when(clienteRepositorio.findById(1L)).thenReturn(Optional.of(clienteComEndereco(null)));
-
-        assertEquals(0, servico.listarPorCliente(1L).size());
-    }
-
-    @Test
-    @DisplayName("listarPorCliente: lanca RecursoNaoEncontrado quando o cliente nao existe")
-    void listarPorClienteInexistente() {
-        when(clienteRepositorio.findById(999L)).thenReturn(Optional.empty());
+    @DisplayName("obterPorUsuario: lanca RecursoNaoEncontrado quando o usuario nao tem endereco")
+    void obterPorUsuarioSemEndereco() {
+        when(usuarioRepositorio.findById(1L)).thenReturn(Optional.of(usuarioComEndereco(null)));
 
         RecursoNaoEncontradoException excecao = assertThrows(
-                RecursoNaoEncontradoException.class, () -> servico.listarPorCliente(999L));
+                RecursoNaoEncontradoException.class, () -> servico.obterPorUsuario(1L));
 
-        assertEquals("Cliente de id 999 nao foi encontrado", excecao.getMessage());
+        assertEquals("O usuario de id 1 nao possui endereco", excecao.getMessage());
     }
 
     @Test
-    @DisplayName("criar: persiste o endereco e o vincula ao cliente")
-    void criarVinculaAoCliente() {
-        Cliente cliente = clienteComEndereco(null);
-        when(clienteRepositorio.findById(1L)).thenReturn(Optional.of(cliente));
+    @DisplayName("obterPorUsuario: lanca RecursoNaoEncontrado quando o usuario nao existe")
+    void obterPorUsuarioInexistente() {
+        when(usuarioRepositorio.findById(999L)).thenReturn(Optional.empty());
+
+        RecursoNaoEncontradoException excecao = assertThrows(
+                RecursoNaoEncontradoException.class, () -> servico.obterPorUsuario(999L));
+
+        assertEquals("Usuario de id 999 nao foi encontrado", excecao.getMessage());
+    }
+
+    @Test
+    @DisplayName("criar: persiste o endereco e o vincula ao usuario")
+    void criarVinculaAoUsuario() {
+        Usuario usuario = usuarioComEndereco(null);
+        when(usuarioRepositorio.findById(1L)).thenReturn(Optional.of(usuario));
         when(repositorio.save(any(Endereco.class))).thenAnswer(chamada -> {
             Endereco argumento = chamada.getArgument(0);
             argumento.setId(99L);
@@ -101,34 +102,30 @@ class EnderecoServicoTest {
         Endereco criado = servico.criar(1L, endereco(null, "Santos"));
 
         assertEquals(99L, criado.getId());
-        assertEquals(1, cliente.getEnderecos().size());
-        assertSame(criado, cliente.getEnderecos().get(0));
-        verify(clienteRepositorio).save(cliente);
+        assertSame(criado, usuario.getEndereco());
+        verify(usuarioRepositorio).save(usuario);
     }
 
     @Test
-    @DisplayName("criar: aceita um segundo endereco no mesmo cliente")
+    @DisplayName("criar: lanca Conflito quando o usuario ja tem endereco, apontando a rota de alteracao")
     void criarSegundoEndereco() {
-        Cliente cliente = clienteComEndereco(endereco(3L, "Santos"));
-        when(clienteRepositorio.findById(1L)).thenReturn(Optional.of(cliente));
-        when(repositorio.save(any(Endereco.class))).thenAnswer(chamada -> {
-            Endereco argumento = chamada.getArgument(0);
-            argumento.setId(4L);
-            return argumento;
-        });
+        Usuario usuario = usuarioComEndereco(endereco(3L, "Santos"));
+        when(usuarioRepositorio.findById(1L)).thenReturn(Optional.of(usuario));
 
-        servico.criar(1L, endereco(null, "Rio de Janeiro"));
+        ConflitoException excecao = assertThrows(ConflitoException.class,
+                () -> servico.criar(1L, endereco(null, "Rio de Janeiro")));
 
-        assertEquals(2, cliente.getEnderecos().size());
-        assertEquals("Santos", cliente.getEnderecos().get(0).getCidade());
-        assertEquals("Rio de Janeiro", cliente.getEnderecos().get(1).getCidade());
+        assertEquals("O usuario de id 1 ja possui endereco. Para altera-lo, use PUT /endereco/3",
+                excecao.getMessage());
+        assertEquals("Santos", usuario.getEndereco().getCidade());
+        verify(repositorio, never()).save(any(Endereco.class));
     }
 
     @Test
     @DisplayName("criar: zera um id enviado, para que o endereco seja sempre novo")
     void criarZeraId() {
-        Cliente cliente = clienteComEndereco(null);
-        when(clienteRepositorio.findById(1L)).thenReturn(Optional.of(cliente));
+        Usuario usuario = usuarioComEndereco(null);
+        when(usuarioRepositorio.findById(1L)).thenReturn(Optional.of(usuario));
         when(repositorio.save(any(Endereco.class))).thenAnswer(chamada -> {
             Endereco argumento = chamada.getArgument(0);
             assertEquals(null, argumento.getId());
@@ -140,9 +137,9 @@ class EnderecoServicoTest {
     }
 
     @Test
-    @DisplayName("criar: lanca RecursoNaoEncontrado quando o cliente nao existe")
-    void criarClienteInexistente() {
-        when(clienteRepositorio.findById(999L)).thenReturn(Optional.empty());
+    @DisplayName("criar: lanca RecursoNaoEncontrado quando o usuario nao existe")
+    void criarUsuarioInexistente() {
+        when(usuarioRepositorio.findById(999L)).thenReturn(Optional.empty());
 
         assertThrows(RecursoNaoEncontradoException.class,
                 () -> servico.criar(999L, endereco(null, "Santos")));
@@ -196,10 +193,25 @@ class EnderecoServicoTest {
     }
 
     @Test
-    @DisplayName("excluir: remove o endereco encontrado")
-    void excluirExistente() {
+    @DisplayName("excluir: desliga o endereco do dono, e o orphanRemoval apaga a linha")
+    void excluirDesligaDoDono() {
+        Endereco existente = endereco(3L, "Santos");
+        Usuario dono = usuarioComEndereco(existente);
+        when(repositorio.findById(3L)).thenReturn(Optional.of(existente));
+        when(usuarioRepositorio.findByEnderecoId(3L)).thenReturn(Optional.of(dono));
+
+        servico.excluir(3L);
+
+        assertNull(dono.getEndereco());
+        verify(repositorio, never()).delete(any(Endereco.class));
+    }
+
+    @Test
+    @DisplayName("excluir: apaga direto o endereco que nao pertence a ninguem")
+    void excluirSemDono() {
         Endereco existente = endereco(3L, "Santos");
         when(repositorio.findById(3L)).thenReturn(Optional.of(existente));
+        when(usuarioRepositorio.findByEnderecoId(3L)).thenReturn(Optional.empty());
 
         servico.excluir(3L);
 

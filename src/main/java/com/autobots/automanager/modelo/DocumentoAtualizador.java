@@ -12,8 +12,11 @@ public class DocumentoAtualizador {
 
 	public void atualizar(Documento documento, Documento atualizacao) {
 		if (atualizacao != null) {
-			if (!verificador.verificar(atualizacao.getTipo())) {
+			if (atualizacao.getTipo() != null) {
 				documento.setTipo(atualizacao.getTipo());
+			}
+			if (atualizacao.getDataEmissao() != null) {
+				documento.setDataEmissao(atualizacao.getDataEmissao());
 			}
 			if (!verificador.verificar(atualizacao.getNumero())) {
 				documento.setNumero(atualizacao.getNumero());

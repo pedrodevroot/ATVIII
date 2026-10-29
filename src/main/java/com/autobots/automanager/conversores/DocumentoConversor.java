@@ -16,6 +16,7 @@ public class DocumentoConversor {
     public Documento paraEntidade(DocumentoCadastroDto dto) {
         Documento documento = new Documento();
         documento.setTipo(dto.getTipo());
+        documento.setDataEmissao(dto.getDataEmissao());
         documento.setNumero(dto.getNumero());
         return documento;
     }
@@ -23,6 +24,16 @@ public class DocumentoConversor {
     public Documento paraEntidade(DocumentoAtualizacaoDto dto) {
         Documento documento = new Documento();
         documento.setTipo(dto.getTipo());
+        documento.setDataEmissao(dto.getDataEmissao());
+        documento.setNumero(dto.getNumero());
+        return documento;
+    }
+
+    public Documento paraEntidade(DocumentoDto dto) {
+        Documento documento = new Documento();
+        documento.setId(dto.getId());
+        documento.setTipo(dto.getTipo());
+        documento.setDataEmissao(dto.getDataEmissao());
         documento.setNumero(dto.getNumero());
         return documento;
     }
@@ -31,6 +42,7 @@ public class DocumentoConversor {
         DocumentoDto dto = new DocumentoDto();
         dto.setId(documento.getId());
         dto.setTipo(documento.getTipo());
+        dto.setDataEmissao(documento.getDataEmissao());
         dto.setNumero(documento.getNumero());
         return dto;
     }

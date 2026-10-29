@@ -6,12 +6,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.autobots.automanager.entidades.Cliente;
 import com.autobots.automanager.entidades.Documento;
+import com.autobots.automanager.entidades.Usuario;
 import com.autobots.automanager.excecoes.RecursoNaoEncontradoException;
 import com.autobots.automanager.modelo.DocumentoAtualizador;
-import com.autobots.automanager.repositorios.ClienteRepositorio;
 import com.autobots.automanager.repositorios.DocumentoRepositorio;
+import com.autobots.automanager.repositorios.UsuarioRepositorio;
 
 @Service
 public class DocumentoServico {
@@ -19,21 +19,21 @@ public class DocumentoServico {
     @Autowired
     private DocumentoRepositorio repositorio;
     @Autowired
-    private ClienteRepositorio clienteRepositorio;
+    private UsuarioRepositorio usuarioRepositorio;
     @Autowired
     private DocumentoAtualizador atualizador;
 
-    public List<Documento> listarPorCliente(long clienteId) {
-        return obterCliente(clienteId).getDocumentos();
+    public List<Documento> listarPorUsuario(long usuarioId) {
+        return obterUsuario(usuarioId).getDocumentos();
     }
 
     @Transactional
-    public Documento criar(long clienteId, Documento documento) {
-        Cliente cliente = obterCliente(clienteId);
+    public Documento criar(long usuarioId, Documento documento) {
+        Usuario usuario = obterUsuario(usuarioId);
         documento.setId(null);
         Documento criado = repositorio.save(documento);
-        cliente.getDocumentos().add(criado);
-        clienteRepositorio.save(cliente);
+        usuario.getDocumentos().add(criado);
+        usuarioRepositorio.save(usuario);
         return criado;
     }
 
@@ -54,8 +54,8 @@ public class DocumentoServico {
         repositorio.delete(obterPorId(id));
     }
 
-    private Cliente obterCliente(long clienteId) {
-        return clienteRepositorio.findById(clienteId)
-                .orElseThrow(() -> new RecursoNaoEncontradoException("Cliente", clienteId));
+    private Usuario obterUsuario(long usuarioId) {
+        return usuarioRepositorio.findById(usuarioId)
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Usuario", usuarioId));
     }
 }

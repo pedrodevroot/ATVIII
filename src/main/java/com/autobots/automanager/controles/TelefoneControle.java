@@ -33,17 +33,17 @@ public class TelefoneControle {
     @Autowired
     private AdicionadorLinkTelefone adicionadorLink;
 
-    @GetMapping("/cliente/{clienteId}/telefones")
-    public ResponseEntity<List<TelefoneDto>> obterTelefones(@PathVariable long clienteId) {
-        List<TelefoneDto> resposta = conversor.paraResposta(servico.listarPorCliente(clienteId));
+    @GetMapping("/usuario/{usuarioId}/telefones")
+    public ResponseEntity<List<TelefoneDto>> obterTelefones(@PathVariable long usuarioId) {
+        List<TelefoneDto> resposta = conversor.paraResposta(servico.listarPorUsuario(usuarioId));
         adicionadorLink.adicionarLink(resposta);
         return ResponseEntity.ok(resposta);
     }
 
-    @PostMapping("/cliente/{clienteId}/telefones")
-    public ResponseEntity<TelefoneDto> cadastrarTelefone(@PathVariable long clienteId,
+    @PostMapping("/usuario/{usuarioId}/telefones")
+    public ResponseEntity<TelefoneDto> cadastrarTelefone(@PathVariable long usuarioId,
             @Valid @RequestBody TelefoneCadastroDto dto) {
-        Telefone criado = servico.criar(clienteId, conversor.paraEntidade(dto));
+        Telefone criado = servico.criar(usuarioId, conversor.paraEntidade(dto));
         TelefoneDto resposta = conversor.paraResposta(criado);
         adicionadorLink.adicionarLink(resposta);
         return ResponseEntity.created(URI.create("/telefone/" + criado.getId()))
