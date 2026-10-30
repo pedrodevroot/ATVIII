@@ -21,6 +21,7 @@ public class UsuarioRespostaDto extends RepresentationModel<UsuarioRespostaDto> 
     private String nomeSocial;
     private Date dataNascimento;
     private Date dataCadastro;
+    private Long empresaId;
     private Set<PerfilUsuario> perfis = new TreeSet<>();
     private EnderecoDto endereco;
     private List<DocumentoDto> documentos = new ArrayList<>();

@@ -1,6 +1,7 @@
 package com.autobots.automanager.repositorios;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -11,6 +12,7 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 
+import org.hibernate.Hibernate;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -319,6 +321,9 @@ class MapeamentoJpaTest {
 
         Empresa empresa = empresaCom(cliente, funcionario, carro, "V1", "V2");
         empresaRepositorio.saveAndFlush(empresa);
+        cliente.setEmpresa(empresa);
+        funcionario.setEmpresa(empresa);
+        repositorio.flush();
         gerenciador.clear();
 
         assertEquals(2, vendaRepositorio.count());
@@ -338,9 +343,17 @@ class MapeamentoJpaTest {
         repositorio.save(cliente);
         repositorio.save(funcionario);
         Empresa empresa = empresaRepositorio.saveAndFlush(empresaCom(cliente, funcionario, carro, "V1"));
+        cliente.setEmpresa(empresa);
+        funcionario.setEmpresa(empresa);
+        repositorio.flush();
         gerenciador.clear();
 
-        empresaRepositorio.delete(empresaRepositorio.findById(empresa.getId()).orElseThrow());
+        Empresa lida = empresaRepositorio.findById(empresa.getId()).orElseThrow();
+        assertEquals(2, lida.getUsuarios().size());
+        for (Usuario usuario : lida.getUsuarios()) {
+            usuario.setEmpresa(null);
+        }
+        empresaRepositorio.delete(lida);
         empresaRepositorio.flush();
         gerenciador.clear();
 
@@ -355,6 +368,92 @@ class MapeamentoJpaTest {
                 .setParameter("id", cliente.getId())
                 .getSingleResult();
         assertNull(vinculo);
+    }
+
+    @Test
+    @DisplayName("excluir a empresa sem limpar o vinculo dos usuarios viola a FK")
+    void excluirEmpresaSemLimparUsuarios() {
+        Usuario cliente = usuarioSimples("Cliente", PerfilUsuario.CLIENTE);
+        repositorio.save(cliente);
+        Empresa empresa = new Empresa();
+        empresa.setRazaoSocial("Loja");
+        empresa.setCadastro(new Date());
+        empresaRepositorio.save(empresa);
+        cliente.setEmpresa(empresa);
+        repositorio.flush();
+        gerenciador.clear();
+
+        empresaRepositorio.delete(empresaRepositorio.findById(empresa.getId()).orElseThrow());
+
+        assertThrows(DataIntegrityViolationException.class, () -> empresaRepositorio.flush());
+    }
+
+    @Test
+    @DisplayName("excluir a empresa cuja mercadoria tem fornecedor mantem o fornecedor")
+    void excluirEmpresaComFornecedorDeMercadoria() {
+        Usuario fornecedor = usuarioSimples("Fornecedor", PerfilUsuario.FORNECEDOR);
+        repositorio.save(fornecedor);
+        Empresa empresa = new Empresa();
+        empresa.setRazaoSocial("Loja");
+        empresa.setCadastro(new Date());
+        Mercadoria roda = mercadoria();
+        empresa.getMercadorias().add(roda);
+        empresaRepositorio.save(empresa);
+        fornecedor.setEmpresa(empresa);
+        fornecedor.getMercadorias().add(roda);
+        repositorio.flush();
+        gerenciador.clear();
+
+        Empresa lida = empresaRepositorio.findById(empresa.getId()).orElseThrow();
+        for (Usuario usuario : lida.getUsuarios()) {
+            usuario.setEmpresa(null);
+        }
+        empresaRepositorio.delete(lida);
+        empresaRepositorio.flush();
+        gerenciador.clear();
+
+        assertEquals(0, contar("mercadoria"));
+        assertEquals(1, repositorio.count());
+    }
+
+    @Test
+    @DisplayName("o telefone da empresa fica com empresa_id preenchido e usuario_id vazio")
+    void telefoneDaEmpresa() {
+        Empresa empresa = new Empresa();
+        empresa.setRazaoSocial("Loja");
+        empresa.setCadastro(new Date());
+        Telefone telefone = new Telefone();
+        telefone.setDdd("11");
+        telefone.setNumero("986454527");
+        empresa.getTelefones().add(telefone);
+        empresaRepositorio.saveAndFlush(empresa);
+
+        Object[] linha = (Object[]) gerenciador.getEntityManager()
+                .createNativeQuery("select empresa_id, usuario_id from telefone where id = :id")
+                .setParameter("id", telefone.getId())
+                .getSingleResult();
+
+        assertEquals(empresa.getId().longValue(), ((Number) linha[0]).longValue());
+        assertNull(linha[1]);
+    }
+
+    @Test
+    @DisplayName("LAZY: ler o id da empresa do usuario nao carrega a empresa")
+    void lerIdDaEmpresaNaoCarregaEmpresa() {
+        Usuario cliente = usuarioSimples("Cliente", PerfilUsuario.CLIENTE);
+        repositorio.save(cliente);
+        Empresa empresa = new Empresa();
+        empresa.setRazaoSocial("Loja");
+        empresa.setCadastro(new Date());
+        empresaRepositorio.save(empresa);
+        cliente.setEmpresa(empresa);
+        repositorio.flush();
+        gerenciador.clear();
+
+        Usuario lido = repositorio.findById(cliente.getId()).orElseThrow();
+
+        assertEquals(empresa.getId(), lido.getEmpresa().getId());
+        assertFalse(Hibernate.isInitialized(lido.getEmpresa()));
     }
 
     @Test
@@ -396,8 +495,6 @@ class MapeamentoJpaTest {
         Empresa empresa = new Empresa();
         empresa.setRazaoSocial("Loja");
         empresa.setCadastro(new Date());
-        empresa.getUsuarios().add(cliente);
-        empresa.getUsuarios().add(funcionario);
         Mercadoria roda = mercadoria();
         Servico alinhamento = new Servico();
         alinhamento.setNome("Alinhamento");

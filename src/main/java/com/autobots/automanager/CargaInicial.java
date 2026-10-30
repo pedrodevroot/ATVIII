@@ -85,9 +85,6 @@ public class CargaInicial implements ApplicationRunner {
         empresa.setCadastro(agora);
         empresa.setEndereco(endereco("Sao Paulo", "Sao Paulo", "Centro", "Avenida Sao Joao", "00", "01035000"));
         empresa.getTelefones().add(telefone("11", "986454527"));
-        empresa.getUsuarios().add(funcionario);
-        empresa.getUsuarios().add(fornecedor);
-        empresa.getUsuarios().add(cliente);
 
         Mercadoria roda = new Mercadoria();
         roda.setNome("Roda de liga leve modelo toyota etios");
@@ -111,6 +108,9 @@ public class CargaInicial implements ApplicationRunner {
                 balanceamento, alinhamento));
         empresaRepositorio.save(empresa);
 
+        funcionario.setEmpresa(empresa);
+        fornecedor.setEmpresa(empresa);
+        cliente.setEmpresa(empresa);
         fornecedor.getMercadorias().add(roda);
     }
 

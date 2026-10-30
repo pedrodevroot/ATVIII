@@ -6,10 +6,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.autobots.automanager.entidades.Empresa;
 import com.autobots.automanager.entidades.Telefone;
 import com.autobots.automanager.entidades.Usuario;
 import com.autobots.automanager.excecoes.RecursoNaoEncontradoException;
 import com.autobots.automanager.modelo.TelefoneAtualizador;
+import com.autobots.automanager.repositorios.EmpresaRepositorio;
 import com.autobots.automanager.repositorios.TelefoneRepositorio;
 import com.autobots.automanager.repositorios.UsuarioRepositorio;
 
@@ -20,6 +22,8 @@ public class TelefoneServico {
     private TelefoneRepositorio repositorio;
     @Autowired
     private UsuarioRepositorio usuarioRepositorio;
+    @Autowired
+    private EmpresaRepositorio empresaRepositorio;
     @Autowired
     private TelefoneAtualizador atualizador;
 
@@ -54,8 +58,27 @@ public class TelefoneServico {
         repositorio.delete(obterPorId(id));
     }
 
+    public List<Telefone> listarPorEmpresa(long empresaId) {
+        return obterEmpresa(empresaId).getTelefones();
+    }
+
+    @Transactional
+    public Telefone criarNaEmpresa(long empresaId, Telefone telefone) {
+        Empresa empresa = obterEmpresa(empresaId);
+        telefone.setId(null);
+        Telefone criado = repositorio.save(telefone);
+        empresa.getTelefones().add(criado);
+        empresaRepositorio.save(empresa);
+        return criado;
+    }
+
     private Usuario obterUsuario(long usuarioId) {
         return usuarioRepositorio.findById(usuarioId)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Usuario", usuarioId));
+    }
+
+    private Empresa obterEmpresa(long empresaId) {
+        return empresaRepositorio.findById(empresaId)
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Empresa", empresaId));
     }
 }

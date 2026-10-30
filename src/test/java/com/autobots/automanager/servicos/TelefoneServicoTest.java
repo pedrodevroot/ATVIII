@@ -17,10 +17,12 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.autobots.automanager.entidades.Empresa;
 import com.autobots.automanager.entidades.Usuario;
 import com.autobots.automanager.entidades.Telefone;
 import com.autobots.automanager.excecoes.RecursoNaoEncontradoException;
 import com.autobots.automanager.modelo.TelefoneAtualizador;
+import com.autobots.automanager.repositorios.EmpresaRepositorio;
 import com.autobots.automanager.repositorios.UsuarioRepositorio;
 import com.autobots.automanager.repositorios.TelefoneRepositorio;
 
@@ -31,6 +33,8 @@ class TelefoneServicoTest {
     private TelefoneRepositorio repositorio;
     @Mock
     private UsuarioRepositorio usuarioRepositorio;
+    @Mock
+    private EmpresaRepositorio empresaRepositorio;
     @Mock
     private TelefoneAtualizador atualizador;
 
@@ -187,5 +191,47 @@ class TelefoneServicoTest {
         assertThrows(RecursoNaoEncontradoException.class, () -> servico.excluir(999L));
 
         verify(repositorio, never()).delete(any(Telefone.class));
+    }
+
+    @Test
+    @DisplayName("listarPorEmpresa: devolve os telefones da empresa")
+    void listarPorEmpresa() {
+        Telefone existente = telefone(1L, "11", "986454527");
+        Empresa empresa = new Empresa();
+        empresa.getTelefones().add(existente);
+        when(empresaRepositorio.findById(1L)).thenReturn(Optional.of(empresa));
+
+        assertSame(existente, servico.listarPorEmpresa(1L).get(0));
+    }
+
+    @Test
+    @DisplayName("criarNaEmpresa: persiste o telefone e o vincula a empresa")
+    void criarVinculaAEmpresa() {
+        Empresa empresa = new Empresa();
+        when(empresaRepositorio.findById(1L)).thenReturn(Optional.of(empresa));
+        when(repositorio.save(any(Telefone.class))).thenAnswer(chamada -> {
+            Telefone argumento = chamada.getArgument(0);
+            assertEquals(null, argumento.getId());
+            argumento.setId(99L);
+            return argumento;
+        });
+
+        Telefone criado = servico.criarNaEmpresa(1L, telefone(7L, "11", "986454527"));
+
+        assertEquals(99L, criado.getId());
+        assertSame(criado, empresa.getTelefones().get(0));
+        verify(empresaRepositorio).save(empresa);
+    }
+
+    @Test
+    @DisplayName("criarNaEmpresa: lanca RecursoNaoEncontrado quando a empresa nao existe")
+    void criarEmpresaInexistente() {
+        when(empresaRepositorio.findById(999L)).thenReturn(Optional.empty());
+
+        RecursoNaoEncontradoException excecao = assertThrows(RecursoNaoEncontradoException.class,
+                () -> servico.criarNaEmpresa(999L, telefone(null, "11", "986454527")));
+
+        assertEquals("Empresa de id 999 nao foi encontrado", excecao.getMessage());
+        verify(repositorio, never()).save(any(Telefone.class));
     }
 }

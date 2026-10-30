@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 import com.autobots.automanager.controles.CredencialControle;
 import com.autobots.automanager.controles.DocumentoControle;
 import com.autobots.automanager.controles.EmailControle;
+import com.autobots.automanager.controles.EmpresaControle;
 import com.autobots.automanager.controles.EnderecoControle;
 import com.autobots.automanager.controles.TelefoneControle;
 import com.autobots.automanager.controles.UsuarioControle;
@@ -37,6 +38,9 @@ public class AdicionadorLinkUsuario implements AdicionadorLink<UsuarioRespostaDt
 		objeto.add(linkTo(methodOn(CredencialControle.class).obterCredenciais(id)).withRel("credenciais"));
 		if (objeto.getEndereco() != null) {
 			objeto.add(linkTo(methodOn(EnderecoControle.class).obterEnderecoDoUsuario(id)).withRel("endereco"));
+		}
+		if (objeto.getEmpresaId() != null) {
+			objeto.add(linkTo(methodOn(EmpresaControle.class).obterEmpresa(objeto.getEmpresaId())).withRel("empresa"));
 		}
 	}
 }

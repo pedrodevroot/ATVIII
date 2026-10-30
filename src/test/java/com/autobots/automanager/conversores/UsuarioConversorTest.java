@@ -28,6 +28,7 @@ import com.autobots.automanager.dtos.UsuarioRespostaDto;
 import com.autobots.automanager.entidades.CredencialUsuarioSenha;
 import com.autobots.automanager.entidades.Documento;
 import com.autobots.automanager.entidades.Email;
+import com.autobots.automanager.entidades.Empresa;
 import com.autobots.automanager.entidades.Endereco;
 import com.autobots.automanager.entidades.Telefone;
 import com.autobots.automanager.entidades.Usuario;
@@ -306,6 +307,21 @@ class UsuarioConversorTest {
         assertTrue(dto.getTelefones().isEmpty());
         assertTrue(dto.getEmails().isEmpty());
         assertTrue(dto.getCredenciais().isEmpty());
+    }
+
+    @Test
+    @DisplayName("resposta: expoe o id da empresa quando ha vinculo, e nada quando nao ha")
+    void respostaComESemEmpresa() {
+        Empresa empresa = new Empresa();
+        empresa.setId(7L);
+        Usuario comEmpresa = new Usuario();
+        comEmpresa.setId(1L);
+        comEmpresa.setEmpresa(empresa);
+        Usuario semEmpresa = new Usuario();
+        semEmpresa.setId(2L);
+
+        assertEquals(7L, conversor.paraResposta(comEmpresa).getEmpresaId());
+        assertNull(conversor.paraResposta(semEmpresa).getEmpresaId());
     }
 
     @Test

@@ -32,6 +32,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import com.autobots.automanager.conversores.UsuarioConversor;
 import com.autobots.automanager.entidades.CredencialUsuarioSenha;
+import com.autobots.automanager.entidades.Empresa;
 import com.autobots.automanager.entidades.Endereco;
 import com.autobots.automanager.entidades.Telefone;
 import com.autobots.automanager.entidades.Usuario;
@@ -447,6 +448,47 @@ class UsuarioControleTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.endereco.cidade").value("Santos"))
                 .andExpect(jsonPath("$._links.endereco.href").value("http://localhost/usuario/1/endereco"));
+    }
+
+    @Test
+    @DisplayName("GET /usuario/{id}: sem empresaId e sem link quando o usuario nao tem empresa")
+    void obterPorIdSemEmpresa() throws Exception {
+        when(servico.obterPorId(1L)).thenReturn(usuario(1L, "Sem Empresa"));
+
+        requisicao.perform(get("/usuario/1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.empresaId").doesNotExist())
+                .andExpect(jsonPath("$._links.empresa").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("GET /usuario/{id}: com empresaId e link quando o usuario tem empresa")
+    void obterPorIdComEmpresa() throws Exception {
+        Empresa empresa = new Empresa();
+        empresa.setId(7L);
+        Usuario usuario = usuario(1L, "Com Empresa");
+        usuario.setEmpresa(empresa);
+        when(servico.obterPorId(1L)).thenReturn(usuario);
+
+        requisicao.perform(get("/usuario/1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.empresaId").value(7))
+                .andExpect(jsonPath("$._links.empresa.href").value("http://localhost/empresa/7"));
+    }
+
+    @Test
+    @DisplayName("GET /usuario/usuarios: cada item mostra o empresaId")
+    void listarComEmpresa() throws Exception {
+        Empresa empresa = new Empresa();
+        empresa.setId(7L);
+        Usuario comEmpresa = usuario(1L, "Com Empresa");
+        comEmpresa.setEmpresa(empresa);
+        when(servico.listar()).thenReturn(List.of(comEmpresa, usuario(2L, "Sem Empresa")));
+
+        requisicao.perform(get("/usuario/usuarios"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].empresaId").value(7))
+                .andExpect(jsonPath("$[1].empresaId").doesNotExist());
     }
 
     @Test

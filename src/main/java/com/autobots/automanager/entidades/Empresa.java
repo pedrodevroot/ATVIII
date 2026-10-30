@@ -37,8 +37,7 @@ public class Empresa {
 	@JoinColumn(name = "empresa_id")
 	@OrderBy("id")
 	private List<Telefone> telefones = new ArrayList<>();
-	@OneToMany
-	@JoinColumn(name = "empresa_id")
+	@OneToMany(mappedBy = "empresa")
 	@OrderBy("id")
 	private List<Usuario> usuarios = new ArrayList<>();
 	@OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)

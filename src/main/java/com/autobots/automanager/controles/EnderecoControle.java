@@ -49,6 +49,23 @@ public class EnderecoControle {
                 .body(resposta);
     }
 
+    @GetMapping("/empresa/{empresaId}/endereco")
+    public ResponseEntity<EnderecoDto> obterEnderecoDaEmpresa(@PathVariable long empresaId) {
+        EnderecoDto resposta = conversor.paraResposta(servico.obterPorEmpresa(empresaId));
+        adicionadorLink.adicionarLink(resposta);
+        return ResponseEntity.ok(resposta);
+    }
+
+    @PostMapping("/empresa/{empresaId}/endereco")
+    public ResponseEntity<EnderecoDto> cadastrarEnderecoDaEmpresa(@PathVariable long empresaId,
+            @Valid @RequestBody EnderecoCadastroDto dto) {
+        Endereco criado = servico.criarNaEmpresa(empresaId, conversor.paraEntidade(dto));
+        EnderecoDto resposta = conversor.paraResposta(criado);
+        adicionadorLink.adicionarLink(resposta);
+        return ResponseEntity.created(URI.create("/endereco/" + criado.getId()))
+                .body(resposta);
+    }
+
     @GetMapping("/endereco/{id}")
     public ResponseEntity<EnderecoDto> obterEndereco(@PathVariable long id) {
         EnderecoDto resposta = conversor.paraResposta(servico.obterPorId(id));

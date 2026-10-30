@@ -80,6 +80,9 @@ public class UsuarioConversor {
         dto.setNomeSocial(usuario.getNomeSocial());
         dto.setDataNascimento(usuario.getDataNascimento());
         dto.setDataCadastro(usuario.getDataCadastro());
+        if (usuario.getEmpresa() != null) {
+            dto.setEmpresaId(usuario.getEmpresa().getId());
+        }
         dto.getPerfis().addAll(usuario.getPerfis());
         if (usuario.getEndereco() != null) {
             dto.setEndereco(enderecoConversor.paraResposta(usuario.getEndereco()));

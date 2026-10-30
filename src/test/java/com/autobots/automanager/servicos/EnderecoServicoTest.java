@@ -18,11 +18,13 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.autobots.automanager.entidades.Empresa;
 import com.autobots.automanager.entidades.Endereco;
 import com.autobots.automanager.entidades.Usuario;
 import com.autobots.automanager.excecoes.ConflitoException;
 import com.autobots.automanager.excecoes.RecursoNaoEncontradoException;
 import com.autobots.automanager.modelo.EnderecoAtualizador;
+import com.autobots.automanager.repositorios.EmpresaRepositorio;
 import com.autobots.automanager.repositorios.EnderecoRepositorio;
 import com.autobots.automanager.repositorios.UsuarioRepositorio;
 
@@ -33,6 +35,8 @@ class EnderecoServicoTest {
     private EnderecoRepositorio repositorio;
     @Mock
     private UsuarioRepositorio usuarioRepositorio;
+    @Mock
+    private EmpresaRepositorio empresaRepositorio;
     @Mock
     private EnderecoAtualizador atualizador;
 
@@ -204,6 +208,76 @@ class EnderecoServicoTest {
 
         assertNull(dono.getEndereco());
         verify(repositorio, never()).delete(any(Endereco.class));
+    }
+
+    @Test
+    @DisplayName("excluir: desliga o endereco da empresa dona")
+    void excluirDesligaDaEmpresa() {
+        Endereco existente = endereco(3L, "Santos");
+        Empresa dona = new Empresa();
+        dona.setEndereco(existente);
+        when(repositorio.findById(3L)).thenReturn(Optional.of(existente));
+        when(usuarioRepositorio.findByEnderecoId(3L)).thenReturn(Optional.empty());
+        when(empresaRepositorio.findByEnderecoId(3L)).thenReturn(Optional.of(dona));
+
+        servico.excluir(3L);
+
+        assertNull(dona.getEndereco());
+        verify(repositorio, never()).delete(any(Endereco.class));
+    }
+
+    @Test
+    @DisplayName("obterPorEmpresa: devolve o endereco da empresa")
+    void obterPorEmpresa() {
+        Endereco existente = endereco(3L, "Santos");
+        Empresa empresa = new Empresa();
+        empresa.setEndereco(existente);
+        when(empresaRepositorio.findById(1L)).thenReturn(Optional.of(empresa));
+
+        assertSame(existente, servico.obterPorEmpresa(1L));
+    }
+
+    @Test
+    @DisplayName("obterPorEmpresa: lanca RecursoNaoEncontrado quando a empresa nao tem endereco")
+    void obterPorEmpresaSemEndereco() {
+        when(empresaRepositorio.findById(1L)).thenReturn(Optional.of(new Empresa()));
+
+        RecursoNaoEncontradoException excecao = assertThrows(
+                RecursoNaoEncontradoException.class, () -> servico.obterPorEmpresa(1L));
+
+        assertEquals("A empresa de id 1 nao possui endereco", excecao.getMessage());
+    }
+
+    @Test
+    @DisplayName("criarNaEmpresa: persiste o endereco e o vincula a empresa")
+    void criarVinculaAEmpresa() {
+        Empresa empresa = new Empresa();
+        when(empresaRepositorio.findById(1L)).thenReturn(Optional.of(empresa));
+        when(repositorio.save(any(Endereco.class))).thenAnswer(chamada -> {
+            Endereco argumento = chamada.getArgument(0);
+            argumento.setId(99L);
+            return argumento;
+        });
+
+        Endereco criado = servico.criarNaEmpresa(1L, endereco(null, "Santos"));
+
+        assertSame(criado, empresa.getEndereco());
+        verify(empresaRepositorio).save(empresa);
+    }
+
+    @Test
+    @DisplayName("criarNaEmpresa: lanca Conflito quando a empresa ja tem endereco")
+    void criarSegundoEnderecoNaEmpresa() {
+        Empresa empresa = new Empresa();
+        empresa.setEndereco(endereco(3L, "Santos"));
+        when(empresaRepositorio.findById(1L)).thenReturn(Optional.of(empresa));
+
+        ConflitoException excecao = assertThrows(ConflitoException.class,
+                () -> servico.criarNaEmpresa(1L, endereco(null, "Rio de Janeiro")));
+
+        assertEquals("A empresa de id 1 ja possui endereco. Para altera-lo, use PUT /endereco/3",
+                excecao.getMessage());
+        verify(repositorio, never()).save(any(Endereco.class));
     }
 
     @Test

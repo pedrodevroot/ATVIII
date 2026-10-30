@@ -291,4 +291,57 @@ class TelefoneControleTest {
                 .andExpect(jsonPath("$._links").doesNotExist())
                 .andExpect(jsonPath("$.links").doesNotExist());
     }
+
+    @Test
+    @DisplayName("GET /empresa/{id}/telefones: 200 com a lista e link self")
+    void listarDaEmpresaOk() throws Exception {
+        when(servico.listarPorEmpresa(1L)).thenReturn(List.of(telefone(1L, "11", "986454527")));
+
+        requisicao.perform(get("/empresa/1/telefones"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].links[0].href").value("http://localhost/telefone/1"));
+    }
+
+    @Test
+    @DisplayName("GET /empresa/{id}/telefones: 404 quando a empresa nao existe")
+    void listarDaEmpresaInexistente() throws Exception {
+        when(servico.listarPorEmpresa(999L))
+                .thenThrow(new RecursoNaoEncontradoException("Empresa", 999L));
+
+        requisicao.perform(get("/empresa/999/telefones"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("POST /empresa/{id}/telefones: 201 com header Location")
+    void criarNaEmpresaOk() throws Exception {
+        when(servico.criarNaEmpresa(anyLong(), any(Telefone.class)))
+                .thenReturn(telefone(5L, "11", "986454527"));
+
+        String corpo = """
+                { "ddd": "11", "numero": "986454527" }
+                """;
+
+        requisicao.perform(post("/empresa/1/telefones")
+                .contentType(MediaType.APPLICATION_JSON).content(corpo))
+                .andExpect(status().isCreated())
+                .andExpect(header().string("Location", "/telefone/5"))
+                .andExpect(jsonPath("$._links.self.href").value("http://localhost/telefone/5"));
+    }
+
+    @Test
+    @DisplayName("POST /empresa/{id}/telefones: 400 quando ddd e numero sao invalidos")
+    void criarNaEmpresaInvalido() throws Exception {
+        String corpo = """
+                { "ddd": "1", "numero": "abc" }
+                """;
+
+        requisicao.perform(post("/empresa/1/telefones")
+                .contentType(MediaType.APPLICATION_JSON).content(corpo))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.erros[*].campo", hasItem("ddd")));
+
+        verifyNoInteractions(servico);
+    }
 }

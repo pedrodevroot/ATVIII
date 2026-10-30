@@ -314,4 +314,71 @@ class EnderecoControleTest {
                 .andExpect(jsonPath("$._links").doesNotExist())
                 .andExpect(jsonPath("$.links").doesNotExist());
     }
+
+    @Test
+    @DisplayName("GET /empresa/{id}/endereco: 200 com o endereco da empresa e link self")
+    void obterDaEmpresaOk() throws Exception {
+        when(servico.obterPorEmpresa(1L)).thenReturn(endereco(3L, "Sao Paulo"));
+
+        requisicao.perform(get("/empresa/1/endereco"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.cidade").value("Sao Paulo"))
+                .andExpect(jsonPath("$._links.self.href").value("http://localhost/endereco/3"));
+    }
+
+    @Test
+    @DisplayName("GET /empresa/{id}/endereco: 404 quando a empresa nao tem endereco")
+    void obterDaEmpresaSemEndereco() throws Exception {
+        when(servico.obterPorEmpresa(1L))
+                .thenThrow(new RecursoNaoEncontradoException("A empresa de id 1 nao possui endereco"));
+
+        requisicao.perform(get("/empresa/1/endereco"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.mensagem").value("A empresa de id 1 nao possui endereco"));
+    }
+
+    @Test
+    @DisplayName("POST /empresa/{id}/endereco: 201 com header Location")
+    void criarNaEmpresaOk() throws Exception {
+        when(servico.criarNaEmpresa(anyLong(), any(Endereco.class))).thenReturn(endereco(5L, "Sao Paulo"));
+
+        String corpo = """
+                { "cidade": "Sao Paulo", "rua": "Avenida Sao Joao", "numero": "100" }
+                """;
+
+        requisicao.perform(post("/empresa/1/endereco")
+                .contentType(MediaType.APPLICATION_JSON).content(corpo))
+                .andExpect(status().isCreated())
+                .andExpect(header().string("Location", "/endereco/5"));
+    }
+
+    @Test
+    @DisplayName("POST /empresa/{id}/endereco: 409 quando a empresa ja tem endereco")
+    void criarSegundoEnderecoNaEmpresa() throws Exception {
+        when(servico.criarNaEmpresa(anyLong(), any(Endereco.class))).thenThrow(new ConflitoException(
+                "A empresa de id 1 ja possui endereco. Para altera-lo, use PUT /endereco/3"));
+
+        String corpo = """
+                { "cidade": "Sao Paulo", "rua": "Avenida Sao Joao", "numero": "100" }
+                """;
+
+        requisicao.perform(post("/empresa/1/endereco")
+                .contentType(MediaType.APPLICATION_JSON).content(corpo))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    @DisplayName("POST /empresa/{id}/endereco: 400 quando cidade, rua ou numero faltam")
+    void criarNaEmpresaIncompleto() throws Exception {
+        String corpo = """
+                { "bairro": "Centro" }
+                """;
+
+        requisicao.perform(post("/empresa/1/endereco")
+                .contentType(MediaType.APPLICATION_JSON).content(corpo))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.erros[*].campo", hasItem("cidade")));
+
+        verifyNoInteractions(servico);
+    }
 }

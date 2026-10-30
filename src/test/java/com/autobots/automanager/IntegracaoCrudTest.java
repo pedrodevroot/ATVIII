@@ -21,7 +21,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
-import com.autobots.automanager.repositorios.EmpresaRepositorio;
 import com.autobots.automanager.repositorios.UsuarioRepositorio;
 import com.autobots.automanager.repositorios.VendaRepositorio;
 import com.jayway.jsonpath.JsonPath;
@@ -34,8 +33,6 @@ class IntegracaoCrudTest {
     private MockMvc requisicao;
     @Autowired
     private UsuarioRepositorio repositorio;
-    @Autowired
-    private EmpresaRepositorio empresaRepositorio;
     @Autowired
     private VendaRepositorio vendaRepositorio;
 
@@ -397,8 +394,19 @@ class IntegracaoCrudTest {
                 .andReturn().getResponse().getContentAsString();
 
         assertEquals("dompedrocliente", JsonPath.read(resposta, "$[2].credenciais[0].nomeUsuario"));
-        assertEquals(1, empresaRepositorio.count());
         assertEquals(2, vendaRepositorio.count());
+
+        String empresas = requisicao.perform(get("/empresa/empresas"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].razaoSocial").value("Car service toyota ltda"))
+                .andExpect(jsonPath("$[0].endereco.cidade").value("Sao Paulo"))
+                .andReturn().getResponse().getContentAsString();
+        int idEmpresa = JsonPath.read(empresas, "$[0].id");
+
+        requisicao.perform(get("/empresa/" + idEmpresa + "/usuarios"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(3))
+                .andExpect(jsonPath("$[0].empresaId").value(idEmpresa));
     }
 
     @Test
@@ -416,6 +424,212 @@ class IntegracaoCrudTest {
 
         requisicao.perform(get("/usuario/" + idFuncionario))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("ciclo completo da empresa: cadastrar, consultar, atualizar e remover")
+    void cicloCompletoDaEmpresa() throws Exception {
+        long id = criarFilho("/empresa/cadastro", """
+                {
+                  "razaoSocial": "Oficina Central Ltda",
+                  "nomeFantasia": "Oficina Central",
+                  "endereco": { "cidade": "Santos", "rua": "Rua XV", "numero": "100" },
+                  "telefones": [ { "ddd": "13", "numero": "32221100" } ]
+                }
+                """);
+
+        String resposta = requisicao.perform(get("/empresa/" + id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.razaoSocial").value("Oficina Central Ltda"))
+                .andExpect(jsonPath("$.cadastro").exists())
+                .andExpect(jsonPath("$.endereco.cidade").value("Santos"))
+                .andExpect(jsonPath("$.telefones[0].ddd").value("13"))
+                .andReturn().getResponse().getContentAsString();
+        long idTelefone = ((Number) JsonPath.read(resposta, "$.telefones[0].id")).longValue();
+        long idEndereco = ((Number) JsonPath.read(resposta, "$.endereco.id")).longValue();
+
+        requisicao.perform(put("/empresa/atualizar")
+                .contentType(MediaType.APPLICATION_JSON).content("""
+                        { "id": %d, "nomeFantasia": "Central", "endereco": { "cidade": "Guaruja" },
+                          "telefones": [ { "id": %d, "ddd": "11" } ] }
+                        """.formatted(id, idTelefone)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.razaoSocial").value("Oficina Central Ltda"))
+                .andExpect(jsonPath("$.nomeFantasia").value("Central"))
+                .andExpect(jsonPath("$.endereco.cidade").value("Guaruja"))
+                .andExpect(jsonPath("$.telefones[0].ddd").value("11"));
+
+        requisicao.perform(delete("/empresa/excluir/" + id))
+                .andExpect(status().isNoContent());
+
+        requisicao.perform(get("/empresa/" + id)).andExpect(status().isNotFound());
+        requisicao.perform(get("/telefone/" + idTelefone)).andExpect(status().isNotFound());
+        requisicao.perform(get("/endereco/" + idEndereco)).andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("telefone e endereco criados pela rota da empresa; o segundo endereco responde 409")
+    void filhosPelaRotaDaEmpresa() throws Exception {
+        long id = criarFilho("/empresa/cadastro", """
+                { "razaoSocial": "Sem Filhos Ltda" }
+                """);
+
+        requisicao.perform(get("/empresa/" + id + "/endereco"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.mensagem").value("A empresa de id " + id + " nao possui endereco"));
+
+        long idEndereco = criarFilho("/empresa/" + id + "/endereco", """
+                { "cidade": "Santos", "rua": "Rua XV", "numero": "100" }
+                """);
+        criarFilho("/empresa/" + id + "/telefones", """
+                { "ddd": "13", "numero": "32221100" }
+                """);
+
+        requisicao.perform(post("/empresa/" + id + "/endereco")
+                .contentType(MediaType.APPLICATION_JSON).content("""
+                        { "cidade": "Rio de Janeiro", "rua": "Avenida Atlantica", "numero": "1702" }
+                        """))
+                .andExpect(status().isConflict());
+
+        requisicao.perform(get("/empresa/" + id + "/telefones"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1));
+
+        requisicao.perform(get("/empresa/" + id))
+                .andExpect(jsonPath("$._links.endereco.href").exists());
+
+        requisicao.perform(delete("/endereco/" + idEndereco))
+                .andExpect(status().isNoContent());
+
+        requisicao.perform(get("/empresa/" + id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.endereco").doesNotExist())
+                .andExpect(jsonPath("$._links.endereco").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("vinculo do inicio ao fim: vincular, repetir, conflito com outra empresa e desvincular")
+    void cicloDoVinculo() throws Exception {
+        long idEmpresa = criarFilho("/empresa/cadastro", """
+                { "razaoSocial": "Empresa do Vinculo" }
+                """);
+        long idOutra = criarFilho("/empresa/cadastro", """
+                { "razaoSocial": "Outra Empresa" }
+                """);
+        long idUsuario = cadastrar("""
+                { "nome": "Vinculado", "perfis": [ "FUNCIONARIO" ] }
+                """);
+
+        requisicao.perform(get("/usuario/" + idUsuario))
+                .andExpect(jsonPath("$.empresaId").doesNotExist())
+                .andExpect(jsonPath("$._links.empresa").doesNotExist());
+
+        requisicao.perform(put("/empresa/" + idEmpresa + "/usuarios/" + idUsuario))
+                .andExpect(status().isNoContent());
+        requisicao.perform(put("/empresa/" + idEmpresa + "/usuarios/" + idUsuario))
+                .andExpect(status().isNoContent());
+
+        requisicao.perform(get("/empresa/" + idEmpresa + "/usuarios"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].id").value((int) idUsuario))
+                .andExpect(jsonPath("$[0].empresaId").value((int) idEmpresa));
+
+        requisicao.perform(get("/usuario/" + idUsuario))
+                .andExpect(jsonPath("$.empresaId").value((int) idEmpresa))
+                .andExpect(jsonPath("$._links.empresa.href")
+                        .value("http://localhost/empresa/" + idEmpresa));
+
+        requisicao.perform(put("/empresa/" + idOutra + "/usuarios/" + idUsuario))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.mensagem").value("O usuario de id " + idUsuario
+                        + " ja esta vinculado a empresa de id " + idEmpresa
+                        + ". Desvincule-o antes de vincular a outra empresa"));
+
+        requisicao.perform(delete("/empresa/" + idOutra + "/usuarios/" + idUsuario))
+                .andExpect(status().isNotFound());
+
+        requisicao.perform(delete("/empresa/" + idEmpresa + "/usuarios/" + idUsuario))
+                .andExpect(status().isNoContent());
+
+        requisicao.perform(get("/empresa/" + idEmpresa + "/usuarios"))
+                .andExpect(jsonPath("$.length()").value(0));
+
+        requisicao.perform(get("/usuario/" + idUsuario))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.empresaId").doesNotExist());
+
+        requisicao.perform(put("/empresa/" + idOutra + "/usuarios/" + idUsuario))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    @DisplayName("excluir a empresa pela API mantem os usuarios, sem empresaId")
+    void excluirEmpresaMantemUsuarios() throws Exception {
+        long idEmpresa = criarFilho("/empresa/cadastro", """
+                { "razaoSocial": "Vai Fechar" }
+                """);
+        long idUsuario = cadastrar("""
+                { "nome": "Sobrevivente", "perfis": [ "CLIENTE" ] }
+                """);
+        requisicao.perform(put("/empresa/" + idEmpresa + "/usuarios/" + idUsuario))
+                .andExpect(status().isNoContent());
+
+        requisicao.perform(delete("/empresa/excluir/" + idEmpresa))
+                .andExpect(status().isNoContent());
+
+        requisicao.perform(get("/usuario/" + idUsuario))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nome").value("Sobrevivente"))
+                .andExpect(jsonPath("$.empresaId").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("desvincular quem tem vendas e permitido, e as vendas continuam guardadas")
+    void desvincularUsuarioComVendas() throws Exception {
+        String empresas = requisicao.perform(get("/empresa/empresas"))
+                .andReturn().getResponse().getContentAsString();
+        int idEmpresa = JsonPath.read(empresas, "$[0].id");
+        String usuarios = requisicao.perform(get("/usuario/usuarios"))
+                .andReturn().getResponse().getContentAsString();
+        List<Integer> funcionarios = JsonPath.read(usuarios, "$[?(@.nomeSocial == 'Dom Pedro')].id");
+        int idFuncionario = funcionarios.get(0);
+        long vendasAntes = vendaRepositorio.count();
+
+        requisicao.perform(delete("/empresa/" + idEmpresa + "/usuarios/" + idFuncionario))
+                .andExpect(status().isNoContent());
+
+        assertEquals(vendasAntes, vendaRepositorio.count());
+        requisicao.perform(get("/usuario/" + idFuncionario))
+                .andExpect(jsonPath("$.empresaId").doesNotExist());
+
+        requisicao.perform(put("/empresa/" + idEmpresa + "/usuarios/" + idFuncionario))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    @DisplayName("HATEOAS: da empresa se chega aos usuarios, e do usuario de volta a empresa, pelos links")
+    void navegacaoDaEmpresaPelosLinks() throws Exception {
+        String empresas = requisicao.perform(get("/empresa/empresas"))
+                .andReturn().getResponse().getContentAsString();
+        String linkEmpresa = JsonPath.read(empresas, "$[0].links[0].href");
+
+        String empresa = requisicao.perform(get(linkEmpresa))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String linkUsuarios = JsonPath.read(empresa, "$._links.usuarios.href");
+
+        String usuarios = requisicao.perform(get(linkUsuarios))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String linkUsuario = JsonPath.read(usuarios, "$[0].links[0].href");
+
+        String usuario = requisicao.perform(get(linkUsuario))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String linkDeVolta = JsonPath.read(usuario, "$._links.empresa.href");
+
+        assertEquals(linkEmpresa, linkDeVolta);
     }
 
     @Test

@@ -50,6 +50,23 @@ public class TelefoneControle {
                 .body(resposta);
     }
 
+    @GetMapping("/empresa/{empresaId}/telefones")
+    public ResponseEntity<List<TelefoneDto>> obterTelefonesDaEmpresa(@PathVariable long empresaId) {
+        List<TelefoneDto> resposta = conversor.paraResposta(servico.listarPorEmpresa(empresaId));
+        adicionadorLink.adicionarLink(resposta);
+        return ResponseEntity.ok(resposta);
+    }
+
+    @PostMapping("/empresa/{empresaId}/telefones")
+    public ResponseEntity<TelefoneDto> cadastrarTelefoneDaEmpresa(@PathVariable long empresaId,
+            @Valid @RequestBody TelefoneCadastroDto dto) {
+        Telefone criado = servico.criarNaEmpresa(empresaId, conversor.paraEntidade(dto));
+        TelefoneDto resposta = conversor.paraResposta(criado);
+        adicionadorLink.adicionarLink(resposta);
+        return ResponseEntity.created(URI.create("/telefone/" + criado.getId()))
+                .body(resposta);
+    }
+
     @GetMapping("/telefone/{id}")
     public ResponseEntity<TelefoneDto> obterTelefone(@PathVariable long id) {
         TelefoneDto resposta = conversor.paraResposta(servico.obterPorId(id));
