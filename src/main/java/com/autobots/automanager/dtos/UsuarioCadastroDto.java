@@ -9,10 +9,13 @@ import java.util.Set;
 import javax.validation.Valid;
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotEmpty;
+import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Past;
 import javax.validation.constraints.Size;
 
 import com.autobots.automanager.enumeracoes.PerfilUsuario;
+import com.fasterxml.jackson.annotation.JsonSetter;
+import com.fasterxml.jackson.annotation.Nulls;
 
 import lombok.Data;
 
@@ -30,20 +33,24 @@ public class UsuarioCadastroDto {
     private Date dataNascimento;
 
     @NotEmpty(message = "Informe ao menos um perfil: CLIENTE, FUNCIONARIO ou FORNECEDOR")
-    private Set<PerfilUsuario> perfis = new HashSet<>();
+    private Set<@NotNull(message = "Os perfis nao podem conter valor nulo") PerfilUsuario> perfis = new HashSet<>();
 
     @Valid
     private EnderecoCadastroDto endereco;
 
     @Valid
-    private List<DocumentoCadastroDto> documentos = new ArrayList<>();
+    @JsonSetter(nulls = Nulls.AS_EMPTY)
+    private List<@NotNull(message = "A lista de documentos nao pode conter valor nulo") DocumentoCadastroDto> documentos = new ArrayList<>();
 
     @Valid
-    private List<TelefoneCadastroDto> telefones = new ArrayList<>();
+    @JsonSetter(nulls = Nulls.AS_EMPTY)
+    private List<@NotNull(message = "A lista de telefones nao pode conter valor nulo") TelefoneCadastroDto> telefones = new ArrayList<>();
 
     @Valid
-    private List<EmailCadastroDto> emails = new ArrayList<>();
+    @JsonSetter(nulls = Nulls.AS_EMPTY)
+    private List<@NotNull(message = "A lista de e-mails nao pode conter valor nulo") EmailCadastroDto> emails = new ArrayList<>();
 
     @Valid
-    private List<CredencialCadastroDto> credenciais = new ArrayList<>();
+    @JsonSetter(nulls = Nulls.AS_EMPTY)
+    private List<@NotNull(message = "A lista de credenciais nao pode conter valor nulo") CredencialCadastroDto> credenciais = new ArrayList<>();
 }

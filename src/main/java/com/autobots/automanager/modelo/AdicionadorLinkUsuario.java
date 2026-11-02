@@ -12,8 +12,11 @@ import com.autobots.automanager.controles.DocumentoControle;
 import com.autobots.automanager.controles.EmailControle;
 import com.autobots.automanager.controles.EmpresaControle;
 import com.autobots.automanager.controles.EnderecoControle;
+import com.autobots.automanager.controles.MercadoriaControle;
 import com.autobots.automanager.controles.TelefoneControle;
 import com.autobots.automanager.controles.UsuarioControle;
+import com.autobots.automanager.controles.VeiculoControle;
+import com.autobots.automanager.controles.VendaControle;
 import com.autobots.automanager.dtos.UsuarioRespostaDto;
 
 @Component
@@ -36,6 +39,9 @@ public class AdicionadorLinkUsuario implements AdicionadorLink<UsuarioRespostaDt
 		objeto.add(linkTo(methodOn(DocumentoControle.class).obterDocumentos(id)).withRel("documentos"));
 		objeto.add(linkTo(methodOn(EmailControle.class).obterEmails(id)).withRel("emails"));
 		objeto.add(linkTo(methodOn(CredencialControle.class).obterCredenciais(id)).withRel("credenciais"));
+		objeto.add(linkTo(methodOn(VeiculoControle.class).obterVeiculos(id)).withRel("veiculos"));
+		objeto.add(linkTo(methodOn(MercadoriaControle.class).obterMercadoriasDoFornecedor(id)).withRel("mercadorias"));
+		objeto.add(linkTo(methodOn(VendaControle.class).obterVendasDoUsuario(id)).withRel("vendas"));
 		if (objeto.getEndereco() != null) {
 			objeto.add(linkTo(methodOn(EnderecoControle.class).obterEnderecoDoUsuario(id)).withRel("endereco"));
 		}

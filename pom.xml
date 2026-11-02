@@ -11,7 +11,7 @@
 	<artifactId>automanager</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name>automanager</name>
-	<description>Micro-servico para cadastro dos dados do cliente</description>
+	<description>Micro-servico de gestao para lojas de manutencao veicular e venda de autopecas</description>
 	<properties>
 		<java.version>17</java.version>
 		<lombok.version>1.18.38</lombok.version>

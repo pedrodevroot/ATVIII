@@ -22,11 +22,10 @@ services:
     networks:
       - autobots-rede
 
-  # Microsservico 1: cadastro de clientes.
-  cadastro-cliente:
+  automanager:
     build: .
-    image: autobots/cadastro-cliente:1.0
-    container_name: autobots-cadastro-cliente
+    image: autobots/automanager:1.0
+    container_name: autobots-automanager
     environment:
       DB_HOST: postgres
       DB_PORT: 5432

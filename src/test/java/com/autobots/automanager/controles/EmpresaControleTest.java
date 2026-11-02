@@ -100,7 +100,7 @@ class EmpresaControleTest {
     }
 
     @Test
-    @DisplayName("GET /empresa/{id}: links self, empresas, usuarios e telefones")
+    @DisplayName("GET /empresa/{id}: links self, empresas, usuarios, telefones, mercadorias, servicos e vendas")
     void obterPorIdComLinks() throws Exception {
         when(servico.obterPorId(1L)).thenReturn(empresa(1L, "Car Service Ltda"));
 
@@ -110,6 +110,9 @@ class EmpresaControleTest {
                 .andExpect(jsonPath("$._links.empresas.href").value("http://localhost/empresa/empresas"))
                 .andExpect(jsonPath("$._links.usuarios.href").value("http://localhost/empresa/1/usuarios"))
                 .andExpect(jsonPath("$._links.telefones.href").value("http://localhost/empresa/1/telefones"))
+                .andExpect(jsonPath("$._links.mercadorias.href").value("http://localhost/empresa/1/mercadorias"))
+                .andExpect(jsonPath("$._links.servicos.href").value("http://localhost/empresa/1/servicos"))
+                .andExpect(jsonPath("$._links.vendas.href").value("http://localhost/empresa/1/vendas"))
                 .andExpect(jsonPath("$._links.endereco").doesNotExist());
     }
 
@@ -327,5 +330,51 @@ class EmpresaControleTest {
         requisicao.perform(delete("/empresa/1/usuarios/5"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.mensagem").value(mensagem));
+    }
+
+    @Test
+    @DisplayName("POST /empresa/cadastro: lista de telefones enviada como null vale como vazia")
+    void cadastroComTelefonesNulos() throws Exception {
+        when(servico.cadastrar(any(Empresa.class))).thenReturn(empresa(2L, "Oficina"));
+
+        requisicao.perform(post("/empresa/cadastro")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{ \"razaoSocial\": \"Oficina\", \"telefones\": null }"))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    @DisplayName("POST /empresa/cadastro: 400 com telefone nulo na lista")
+    void cadastroComTelefoneNulo() throws Exception {
+        requisicao.perform(post("/empresa/cadastro")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{ \"razaoSocial\": \"Oficina\", \"telefones\": [ null ] }"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.erros[0].campo").value("telefones[0]"));
+
+        verifyNoInteractions(servico);
+    }
+
+    @Test
+    @DisplayName("PUT /empresa/atualizar: lista de telefones enviada como null vale como vazia")
+    void atualizacaoComTelefonesNulos() throws Exception {
+        when(servico.atualizar(any(Empresa.class))).thenReturn(empresa(1L, "Oficina"));
+
+        requisicao.perform(put("/empresa/atualizar")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{ \"id\": 1, \"telefones\": null }"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("PUT /empresa/atualizar: 400 com telefone nulo na lista")
+    void atualizacaoComTelefoneNulo() throws Exception {
+        requisicao.perform(put("/empresa/atualizar")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{ \"id\": 1, \"telefones\": [ null ] }"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.erros[0].campo").value("telefones[0]"));
+
+        verifyNoInteractions(servico);
     }
 }

@@ -8,4 +8,6 @@ import com.autobots.automanager.entidades.Usuario;
 
 public interface UsuarioRepositorio extends JpaRepository<Usuario, Long> {
     Optional<Usuario> findByEnderecoId(Long enderecoId);
+
+    Optional<Usuario> findByMercadoriasId(Long mercadoriaId);
 }

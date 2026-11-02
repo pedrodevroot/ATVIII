@@ -11,6 +11,8 @@ import javax.validation.constraints.Past;
 import javax.validation.constraints.Size;
 
 import com.autobots.automanager.enumeracoes.PerfilUsuario;
+import com.fasterxml.jackson.annotation.JsonSetter;
+import com.fasterxml.jackson.annotation.Nulls;
 
 import lombok.Data;
 
@@ -30,17 +32,20 @@ public class UsuarioAtualizacaoDto {
     private Date dataNascimento;
 
     @Size(min = 1, message = "Se informados, os perfis devem ter ao menos um valor")
-    private Set<PerfilUsuario> perfis;
+    private Set<@NotNull(message = "Os perfis nao podem conter valor nulo") PerfilUsuario> perfis;
 
     @Valid
     private EnderecoAtualizacaoDto endereco;
 
     @Valid
-    private List<DocumentoDto> documentos = new ArrayList<>();
+    @JsonSetter(nulls = Nulls.AS_EMPTY)
+    private List<@NotNull(message = "A lista de documentos nao pode conter valor nulo") DocumentoDto> documentos = new ArrayList<>();
 
     @Valid
-    private List<TelefoneDto> telefones = new ArrayList<>();
+    @JsonSetter(nulls = Nulls.AS_EMPTY)
+    private List<@NotNull(message = "A lista de telefones nao pode conter valor nulo") TelefoneDto> telefones = new ArrayList<>();
 
     @Valid
-    private List<EmailDto> emails = new ArrayList<>();
+    @JsonSetter(nulls = Nulls.AS_EMPTY)
+    private List<@NotNull(message = "A lista de e-mails nao pode conter valor nulo") EmailDto> emails = new ArrayList<>();
 }

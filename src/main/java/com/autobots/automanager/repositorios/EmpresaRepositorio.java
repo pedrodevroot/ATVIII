@@ -8,4 +8,6 @@ import com.autobots.automanager.entidades.Empresa;
 
 public interface EmpresaRepositorio extends JpaRepository<Empresa, Long> {
     Optional<Empresa> findByEnderecoId(Long enderecoId);
+
+    Optional<Empresa> findByVendasId(Long vendaId);
 }

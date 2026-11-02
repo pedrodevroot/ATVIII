@@ -410,7 +410,7 @@ class UsuarioControleTest {
     }
 
     @Test
-    @DisplayName("GET /usuario/{id}: links self, usuarios, telefones, documentos, emails e credenciais")
+    @DisplayName("GET /usuario/{id}: links self, usuarios, telefones, documentos, emails, credenciais, veiculos, mercadorias e vendas")
     void obterPorIdComLinks() throws Exception {
         when(servico.obterPorId(1L)).thenReturn(usuario(1L, "Pedro de Alcantara"));
 
@@ -421,7 +421,10 @@ class UsuarioControleTest {
                 .andExpect(jsonPath("$._links.telefones.href").value("http://localhost/usuario/1/telefones"))
                 .andExpect(jsonPath("$._links.documentos.href").value("http://localhost/usuario/1/documentos"))
                 .andExpect(jsonPath("$._links.emails.href").value("http://localhost/usuario/1/emails"))
-                .andExpect(jsonPath("$._links.credenciais.href").value("http://localhost/usuario/1/credenciais"));
+                .andExpect(jsonPath("$._links.credenciais.href").value("http://localhost/usuario/1/credenciais"))
+                .andExpect(jsonPath("$._links.veiculos.href").value("http://localhost/usuario/1/veiculos"))
+                .andExpect(jsonPath("$._links.mercadorias.href").value("http://localhost/usuario/1/mercadorias"))
+                .andExpect(jsonPath("$._links.vendas.href").value("http://localhost/usuario/1/vendas"));
     }
 
     @Test
@@ -545,5 +548,101 @@ class UsuarioControleTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$._links").doesNotExist())
                 .andExpect(jsonPath("$.links").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("POST /usuario/cadastro: 400 com perfil nulo, sem chegar ao servico")
+    void cadastroComPerfilNulo() throws Exception {
+        requisicao.perform(post("/usuario/cadastro")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{ \"nome\": \"Maria\", \"perfis\": [ null ] }"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.erros[0].mensagem").value("Os perfis nao podem conter valor nulo"));
+
+        verifyNoInteractions(servico);
+    }
+
+    @Test
+    @DisplayName("POST /usuario/cadastro: 400 com perfil informado como numero")
+    void cadastroComPerfilNumerico() throws Exception {
+        requisicao.perform(post("/usuario/cadastro")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{ \"nome\": \"Maria\", \"perfis\": [ 0 ] }"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(servico);
+    }
+
+    @Test
+    @DisplayName("POST /usuario/cadastro: lista enviada como null vale como vazia")
+    void cadastroComListasNulas() throws Exception {
+        when(servico.cadastrar(any(Usuario.class))).thenReturn(usuario(4L, "Maria"));
+
+        String corpo = """
+                { "nome": "Maria", "perfis": [ "CLIENTE" ],
+                  "documentos": null, "telefones": null, "emails": null, "credenciais": null }
+                """;
+
+        requisicao.perform(post("/usuario/cadastro")
+                .contentType(MediaType.APPLICATION_JSON).content(corpo))
+                .andExpect(status().isCreated());
+
+        verify(servico).cadastrar(any(Usuario.class));
+    }
+
+    @Test
+    @DisplayName("POST /usuario/cadastro: 400 com item nulo em qualquer lista")
+    void cadastroComItemNulo() throws Exception {
+        for (String lista : List.of("documentos", "telefones", "emails", "credenciais")) {
+            requisicao.perform(post("/usuario/cadastro")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{ \"nome\": \"Maria\", \"perfis\": [ \"CLIENTE\" ], \"" + lista + "\": [ null ] }"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.erros[0].campo").value(lista + "[0]"));
+        }
+
+        verifyNoInteractions(servico);
+    }
+
+    @Test
+    @DisplayName("PUT /usuario/atualizar: 400 com perfil nulo, sem alterar o usuario")
+    void atualizacaoComPerfilNulo() throws Exception {
+        requisicao.perform(put("/usuario/atualizar")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{ \"id\": 1, \"perfis\": [ null ] }"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.erros[0].mensagem").value("Os perfis nao podem conter valor nulo"));
+
+        verifyNoInteractions(servico);
+    }
+
+    @Test
+    @DisplayName("PUT /usuario/atualizar: lista enviada como null vale como vazia")
+    void atualizacaoComListasNulas() throws Exception {
+        when(servico.atualizar(any(Usuario.class))).thenReturn(usuario(1L, "Maria"));
+
+        String corpo = """
+                { "id": 1, "documentos": null, "telefones": null, "emails": null }
+                """;
+
+        requisicao.perform(put("/usuario/atualizar")
+                .contentType(MediaType.APPLICATION_JSON).content(corpo))
+                .andExpect(status().isOk());
+
+        verify(servico).atualizar(any(Usuario.class));
+    }
+
+    @Test
+    @DisplayName("PUT /usuario/atualizar: 400 com item nulo em qualquer lista")
+    void atualizacaoComItemNulo() throws Exception {
+        for (String lista : List.of("documentos", "telefones", "emails")) {
+            requisicao.perform(put("/usuario/atualizar")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{ \"id\": 1, \"" + lista + "\": [ null ] }"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.erros[0].campo").value(lista + "[0]"));
+        }
+
+        verifyNoInteractions(servico);
     }
 }

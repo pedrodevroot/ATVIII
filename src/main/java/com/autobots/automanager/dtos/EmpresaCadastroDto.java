@@ -5,7 +5,11 @@ import java.util.List;
 
 import javax.validation.Valid;
 import javax.validation.constraints.NotBlank;
+import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Size;
+
+import com.fasterxml.jackson.annotation.JsonSetter;
+import com.fasterxml.jackson.annotation.Nulls;
 
 import lombok.Data;
 
@@ -23,5 +27,6 @@ public class EmpresaCadastroDto {
     private EnderecoCadastroDto endereco;
 
     @Valid
-    private List<TelefoneCadastroDto> telefones = new ArrayList<>();
+    @JsonSetter(nulls = Nulls.AS_EMPTY)
+    private List<@NotNull(message = "A lista de telefones nao pode conter valor nulo") TelefoneCadastroDto> telefones = new ArrayList<>();
 }
