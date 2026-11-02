@@ -134,7 +134,7 @@ class ServicoServicoTest {
     void excluirSemVendas() {
         Servico existente = novoServico(20L);
         when(repositorio.findById(20L)).thenReturn(Optional.of(existente));
-        when(vendaRepositorio.existsByServicosId(20L)).thenReturn(false);
+        when(vendaRepositorio.existsByItensServicoServicoId(20L)).thenReturn(false);
 
         servico.excluir(20L);
 
@@ -145,7 +145,7 @@ class ServicoServicoTest {
     @DisplayName("excluir: lanca Conflito quando o servico possui vendas")
     void excluirComVendas() {
         when(repositorio.findById(20L)).thenReturn(Optional.of(novoServico(20L)));
-        when(vendaRepositorio.existsByServicosId(20L)).thenReturn(true);
+        when(vendaRepositorio.existsByItensServicoServicoId(20L)).thenReturn(true);
 
         ConflitoException excecao = assertThrows(ConflitoException.class, () -> servico.excluir(20L));
 

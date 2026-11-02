@@ -15,6 +15,8 @@ import com.autobots.automanager.entidades.Documento;
 import com.autobots.automanager.entidades.Email;
 import com.autobots.automanager.entidades.Empresa;
 import com.autobots.automanager.entidades.Endereco;
+import com.autobots.automanager.entidades.ItemServico;
+import com.autobots.automanager.entidades.ItemVenda;
 import com.autobots.automanager.entidades.Mercadoria;
 import com.autobots.automanager.entidades.Servico;
 import com.autobots.automanager.entidades.Telefone;
@@ -102,9 +104,9 @@ public class CargaInicial implements ApplicationRunner {
         empresa.getServicos().add(alinhamento);
         empresa.getServicos().add(balanceamento);
 
-        empresa.getVendas().add(venda("1234698745", agora, cliente, funcionario, veiculo, roda,
+        empresa.getVendas().add(venda("1234698745", agora, cliente, funcionario, veiculo, roda, 4,
                 trocaRodas, alinhamento));
-        empresa.getVendas().add(venda("1234698749", agora, cliente, funcionario, veiculo, roda,
+        empresa.getVendas().add(venda("1234698749", agora, cliente, funcionario, veiculo, roda, 4,
                 balanceamento, alinhamento));
         empresaRepositorio.save(empresa);
 
@@ -173,16 +175,26 @@ public class CargaInicial implements ApplicationRunner {
     }
 
     private Venda venda(String identificacao, Date agora, Usuario cliente, Usuario funcionario,
-            Veiculo veiculo, Mercadoria mercadoria, Servico... servicos) {
+            Veiculo veiculo, Mercadoria mercadoria, long quantidade, Servico... servicos) {
         Venda venda = new Venda();
         venda.setIdentificacao(identificacao);
         venda.setCadastro(agora);
         venda.setCliente(cliente);
         venda.setFuncionario(funcionario);
         venda.setVeiculo(veiculo);
-        venda.getMercadorias().add(mercadoria);
+        ItemVenda item = new ItemVenda();
+        item.setVenda(venda);
+        item.setMercadoria(mercadoria);
+        item.setQuantidade(quantidade);
+        item.setValorUnitario(mercadoria.getValor());
+        venda.getItens().add(item);
+        mercadoria.setQuantidade(mercadoria.getQuantidade() - quantidade);
         for (Servico servico : servicos) {
-            venda.getServicos().add(servico);
+            ItemServico itemServico = new ItemServico();
+            itemServico.setVenda(venda);
+            itemServico.setServico(servico);
+            itemServico.setValorUnitario(servico.getValor());
+            venda.getItensServico().add(itemServico);
         }
         return venda;
     }
@@ -190,6 +202,7 @@ public class CargaInicial implements ApplicationRunner {
     private Date data(int ano, int mes, int dia) {
         Calendar calendario = Calendar.getInstance();
         calendario.set(ano, mes, dia, 0, 0, 0);
+        calendario.set(Calendar.MILLISECOND, 0);
         return calendario.getTime();
     }
 }

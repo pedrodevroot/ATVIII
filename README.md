@@ -62,9 +62,9 @@ O comando sobe dois containers: o PostgreSQL e o microsserviço. Na primeira
 subida, os [dados de demonstração](#dados-de-demonstração) são cadastrados
 automaticamente.
 
-> **Já executou a ATVII nesta máquina?** As duas atividades usam o mesmo volume
-> do banco, e o esquema antigo impede a aplicação de subir (erro na coluna
-> `data_emissao`). Antes do `up`, apague esse banco e o container antigo com
+> **Já executou a ATVII ou uma versão anterior desta atividade nesta máquina?**
+> Todas usam o mesmo volume do banco, e o esquema antigo não é compatível com o
+> modelo atual. Antes do `up`, apague esse banco e o container antigo com
 > `docker compose down -v --remove-orphans`.
 > O comando remove de vez os dados que estiverem nele.
 
@@ -90,7 +90,7 @@ docker compose down -v     # para e apaga o banco
 ./mvnw test          # Windows: .\mvnw.cmd test
 ```
 
-São **508 testes automatizados**.
+São **568 testes automatizados**.
 
 Os testes **não precisam de Docker nem de PostgreSQL** — os de integração usam
 banco H2 em memória. Precisam apenas de **Java 17** ou mais recente instalado; o
@@ -99,11 +99,11 @@ Maven vem junto com o projeto, no `mvnw`.
 | Camada | Testes | Ferramenta |
 |---|---|---|
 | Regras de domínio | 50 | JUnit 5 |
-| Conversores DTO | 51 | JUnit 5 |
-| Serviços | 148 | JUnit 5 + Mockito |
-| Controllers (incluindo os links) | 208 | MockMvc |
-| Mapeamento JPA | 21 | H2 |
-| Integração ponta a ponta (incluindo a navegação pelos links) | 30 | H2 |
+| Conversores DTO | 52 | JUnit 5 |
+| Serviços | 178 | JUnit 5 + Mockito |
+| Controllers (incluindo os links) | 217 | MockMvc |
+| Mapeamento JPA | 29 | H2 |
+| Integração ponta a ponta (incluindo a navegação pelos links) | 42 | H2 |
 
 Para rodar os testes sem instalar Java, dentro de um container:
 
@@ -128,7 +128,9 @@ As classes seguem o diagrama da Figura 1 do enunciado.
 | `Veiculo` | Carro de um usuário: tipo, modelo e placa | proprietário e vendas |
 | `Mercadoria` | Peça ou produto: validade, fabricação, quantidade e valor | empresa e fornecedor |
 | `Servico` | Trabalho oferecido pela oficina: nome, valor e descrição | empresa |
-| `Venda` | Registro do que foi vendido a um cliente | cliente, funcionário, veículo (opcional), mercadorias e serviços |
+| `Venda` | Registro do que foi vendido a um cliente | cliente, funcionário, veículo (opcional), itens e serviços |
+| `ItemVenda` | Quantas unidades de uma mercadoria entraram em uma venda e por qual valor | venda e mercadoria |
+| `ItemServico` | Por qual valor um serviço entrou em uma venda | venda e serviço |
 
 | Enumeração | Valores |
 |---|---|
@@ -136,21 +138,101 @@ As classes seguem o diagrama da Figura 1 do enunciado.
 | `TipoDocumento` | `CPF`, `CNPJ`, `RG`, `CNH`, `PASSAPORTE` |
 | `TipoVeiculo` | `HATCH`, `SEDA`, `SUV`, `PICKUP`, `SW` |
 
-### Alterações em relação ao código sugerido
+O diagrama abaixo é a Figura 1 do enunciado com dois acréscimos: `ItemVenda` e
+`ItemServico`. Com as listas diretas da Figura 1, a venda não registra quantas unidades
+de cada mercadoria foram vendidas nem por qual valor, informações necessárias para
+controlar o estoque e manter o histórico. As listas de mercadorias e serviços da Figura 1
+continuam disponíveis em `Venda.getMercadorias()` e `Venda.getServicos()`.
 
-O enunciado dá liberdade para modificar o código da equipe. As funcionalidades
-foram mantidas, com estas mudanças:
-
-| Código sugerido | Este projeto | Motivo |
-|---|---|---|
-| `Set` com `fetch = EAGER` nas coleções | `List` com carga sob demanda e `@OrderBy("id")` | Cada consulta não carrega o banco inteiro, e as listagens têm ordem fixa |
-| `double` em `valor` | `BigDecimal` | `double` acumula erro de arredondamento em valores monetários |
-| `@OneToMany` de venda para mercadorias e serviços | `@ManyToMany` | Com `@OneToMany`, a mesma mercadoria ou serviço não pode aparecer em duas vendas |
-| Validade obrigatória em `Mercadoria` | Validade opcional | Peças como rodas não têm validade |
-| Placa sem restrição | Placa única | Dois veículos não têm a mesma placa |
-| Pacote `entitades`, atributo `fabricao` | `entidades`, `fabricacao` | Correção de grafia |
-
-A classe `Cliente` das atividades anteriores foi substituída por `Usuario`.
+```mermaid
+classDiagram
+    class Empresa {
+        Long id
+        String razaoSocial
+        String nomeFantasia
+        Date cadastro
+    }
+    class Usuario {
+        Long id
+        String nome
+        String nomeSocial
+        Set~PerfilUsuario~ perfis
+    }
+    class Venda {
+        Long id
+        Date cadastro
+        String identificacao
+        getMercadorias() List~Mercadoria~
+        getServicos() List~Servico~
+    }
+    class ItemVenda {
+        Long id
+        long quantidade
+        BigDecimal valorUnitario
+    }
+    class ItemServico {
+        Long id
+        BigDecimal valorUnitario
+    }
+    class Mercadoria {
+        Long id
+        Date validade
+        Date fabricacao
+        Date cadastro
+        String nome
+        long quantidade
+        BigDecimal valor
+        String descricao
+    }
+    class Servico {
+        Long id
+        String nome
+        BigDecimal valor
+        String descricao
+    }
+    class Veiculo {
+        Long id
+        TipoVeiculo tipo
+        String modelo
+        String placa
+    }
+    class Credencial {
+        <<abstract>>
+        Long id
+        Date criacao
+        Date ultimoAcesso
+        boolean inativo
+    }
+    class CredencialUsuarioSenha {
+        String nomeUsuario
+        String senha
+    }
+    class CredencialCodigoBarra {
+        long codigo
+    }
+    Empresa "1" o-- "*" Usuario : usuarios
+    Empresa "1" *-- "*" Mercadoria : mercadorias
+    Empresa "1" *-- "*" Servico : servicos
+    Empresa "1" *-- "*" Venda : vendas
+    Empresa "1" *-- "0..1" Endereco : endereco
+    Empresa "1" *-- "*" Telefone : telefones
+    Usuario "1" *-- "0..1" Endereco : endereco
+    Usuario "1" *-- "*" Telefone : telefones
+    Usuario "1" *-- "*" Documento : documentos
+    Usuario "1" *-- "*" Email : emails
+    Usuario "1" *-- "*" Credencial : credenciais
+    Usuario "1" *-- "*" Veiculo : veiculos
+    Usuario "1" o-- "*" Mercadoria : fornece
+    Venda "*" --> "1" Usuario : cliente
+    Venda "*" --> "1" Usuario : funcionario
+    Venda "*" --> "0..1" Veiculo : veiculo
+    Venda "1" *-- "*" ItemVenda : itens
+    Venda "1" *-- "*" ItemServico : itensServico
+    ItemVenda "*" --> "1" Mercadoria
+    ItemServico "*" --> "1" Servico
+    Credencial <|-- CredencialUsuarioSenha
+    Credencial <|-- CredencialCodigoBarra
+```
 
 ---
 
@@ -177,13 +259,15 @@ Cada nível inclui o anterior.
   "clienteId": 3,
   "funcionarioId": 1,
   "veiculoId": 1,
-  "mercadorias": [
+  "valorTotal": 1300.00,
+  "itens": [
     {
       "id": 1,
+      "mercadoriaId": 1,
       "nome": "Roda de liga leve modelo toyota etios",
-      "quantidade": 30,
-      "valor": 300.00,
-      "_links": { "self": { "href": "http://localhost:18080/mercadoria/1" } }
+      "quantidade": 4,
+      "valorUnitario": 300.00,
+      "_links": { "mercadoria": { "href": "http://localhost:18080/mercadoria/1" } }
     }
   ],
   "_links": {
@@ -200,7 +284,7 @@ Cada nível inclui o anterior.
 | Uma empresa | `self`, `empresas`, `usuarios`, `telefones`, `mercadorias`, `servicos`, `vendas` e, se houver, `endereco` |
 | Um usuário | `self`, `usuarios`, `telefones`, `documentos`, `emails`, `credenciais`, `veiculos`, `mercadorias`, `vendas` e, se houver, `endereco` e `empresa` |
 | Um veículo | `self`, `proprietario`, `vendas` |
-| Uma venda | `self`, `cliente`, `funcionario` e, se houver, `veiculo`; `self` em cada mercadoria e serviço |
+| Uma venda | `self`, `cliente`, `funcionario` e, se houver, `veiculo`; `mercadoria` em cada item e `self` em cada serviço |
 | Uma mercadoria, serviço, telefone, documento, e-mail, endereço ou credencial | `self` |
 | Qualquer lista | `self` em cada item |
 | `PUT` de vínculo, `DELETE` (204) e respostas de erro | sem links |
@@ -249,9 +333,9 @@ Cadastrados automaticamente quando o banco está vazio:
 | Empresa | `1` — Car service toyota ltda |
 | Usuários | `1` funcionário, `2` fornecedor, `3` cliente, todos vinculados à empresa `1` |
 | Veículo | `1` — Corolla Cross, placa `ABC0000`, do cliente `3` |
-| Mercadoria | `1` — roda de liga leve, fornecida pelo usuário `2` |
+| Mercadoria | `1` — roda de liga leve, fornecida pelo usuário `2`, com 22 unidades em estoque |
 | Serviços | `1` troca de rodas, `2` alinhamento, `3` balanceamento |
-| Vendas | `1` e `2` — cliente `3`, funcionário `1`, veículo `1` |
+| Vendas | `1` e `2` — cliente `3`, funcionário `1`, veículo `1`, com 4 rodas cada |
 | Credenciais | `1` `dompedrofuncionario`, `2` `dompedrofornecedor`, `3` `dompedrocliente`, todas com a senha `123456` |
 | Documentos | `1`, `2`, `3` — um para cada usuário, na mesma ordem |
 | E-mails | `1`, `2`, `3` — um para cada usuário, na mesma ordem |
@@ -346,13 +430,27 @@ a mercadoria.
 | `POST` | `/empresa/1/vendas` | **O** | 201 |
 | `GET` | `/venda/3` | — | 200 |
 | `PUT` | `/venda/3` | **P** | 200 |
+| `PUT` | `/venda/3` | `{ "removerVeiculo": true }` | 200 |
 | `DELETE` | `/venda/3` | — | 204 |
 
 `/usuario/{id}/vendas` traz as vendas em que o usuário é o cliente ou o funcionário.
 
+A mercadoria entra na venda pelo campo `itens`, com a quantidade de cada uma, e o
+serviço pelo campo `servicoIds`. O valor de cada um é o do momento em que entrou na
+venda e não muda se o preço for alterado depois. A resposta traz o `valorTotal`, com
+a soma das mercadorias, multiplicadas pela quantidade, e dos serviços.
+
+| Operação | Efeito no estoque da mercadoria |
+|---|---|
+| `POST` | Desconta a quantidade de cada item. Se alguma mercadoria não tiver o suficiente, responde 409 e nada é descontado |
+| `PUT` com `itens` | Devolve as quantidades antigas e desconta as novas. Se não houver o suficiente, responde 409 e nada muda |
+| `PUT` sem `itens` | Não mexe no estoque |
+| `DELETE` | Devolve as quantidades |
+| Exclusão da empresa | Apaga as vendas junto com as mercadorias |
+
 No `PUT`, só os campos enviados são alterados. Uma lista enviada substitui a
 anterior, e uma lista vazia remove os itens, desde que a venda continue com ao
-menos um item.
+menos uma mercadoria ou um serviço.
 
 ### Telefone
 
@@ -412,6 +510,9 @@ Um usuário ou uma empresa tem **um** endereço.
 | `PUT` | `/endereco/1` | `{ "cidade": "Santos" }` | 200 |
 | `DELETE` | `/endereco/1` | — | 204 |
 | `POST` | `/usuario/1/endereco` | **K** | 201 |
+| `DELETE` | `/endereco/4` | — | 204 |
+| `POST` | `/empresa/1/endereco` | **K** | 201 |
+| `DELETE` | `/endereco/5` | — | 204 |
 
 ### Corpos
 
@@ -446,7 +547,7 @@ Um usuário ou uma empresa tem **um** endereço.
 ```
 
 **C** — atualização parcial do usuário: só os campos enviados são alterados. Para
-alterar um filho, o `id` dele é obrigatório.
+alterar um filho, o `id` dele é obrigatório e ele precisa pertencer ao usuário.
 ```json
 {
   "id": 3,
@@ -533,14 +634,18 @@ alterar um filho, o `id` dele é obrigatório.
   "clienteId": 3,
   "funcionarioId": 1,
   "veiculoId": 1,
-  "mercadoriaIds": [ 1 ],
+  "itens": [ { "mercadoriaId": 1, "quantidade": 2 } ],
   "servicoIds": [ 1, 2 ]
 }
 ```
 
 **P** — atualização parcial da venda
 ```json
-{ "identificacao": "OS-0002", "servicoIds": [ 3 ] }
+{
+  "identificacao": "OS-0002",
+  "itens": [ { "mercadoriaId": 1, "quantidade": 3 } ],
+  "servicoIds": [ 3 ]
+}
 ```
 
 ### Casos de erro
@@ -558,6 +663,9 @@ Executados depois das tabelas acima.
 | `DELETE` | `/usuario/excluir/999` | — | 404 |
 | `POST` | `/usuario/999/veiculos` | **L** | 404 |
 | `POST` | `/empresa/999/vendas` | **O** | 404 |
+| `PUT` | `/usuario/atualizar` | `{ "id": 5, "endereco": { "cidade": "Santos" } }` | 404 |
+| `PUT` | `/usuario/atualizar` | `{ "id": 3, "emails": [ { "id": 2, "endereco": "x@email.com" } ] }` | 404 |
+| `PUT` | `/empresa/atualizar` | `{ "id": 1, "telefones": [ { "id": 99, "ddd": "12" } ] }` | 404 |
 | `POST` | `/usuario/cadastro` | `{ "nomeSocial": "Sem nome" }` | 400 |
 | `POST` | `/usuario/cadastro` | `{ "nome": "Sem perfil" }` | 400 |
 | `POST` | `/usuario/cadastro` | `{ "nome": "X", "perfis": [ "GERENTE" ] }` | 400 |
@@ -571,6 +679,7 @@ Executados depois das tabelas acima.
 | `POST` | `/usuario/3/veiculos` | `{ "tipo": "AVIAO", "modelo": "Yaris", "placa": "XYZ1234" }` | 400 |
 | `POST` | `/usuario/3/veiculos` | `{ "tipo": 0, "modelo": "Yaris", "placa": "XYZ1234" }` | 400 |
 | `POST` | `/empresa/1/mercadorias` | **R** | 400 |
+| `POST` | `/empresa/1/mercadorias` | `{ "nome": "Oleo", "fabricacao": "2025-03-01T00:00:00.000+00:00", "quantidade": 1000000000, "valor": 1 }` | 400 |
 | `POST` | `/empresa/1/servicos` | `{ "nome": "Negativo", "valor": -1 }` | 400 |
 | `PUT` | `/usuario/3/mercadorias/1` | — | 400 |
 | `POST` | `/empresa/1/vendas` | **S** | 400 |
@@ -578,6 +687,11 @@ Executados depois das tabelas acima.
 | `POST` | `/empresa/1/vendas` | **U** | 400 |
 | `POST` | `/empresa/1/vendas` | **V** | 400 |
 | `POST` | `/empresa/1/vendas` | **W** | 400 |
+| `POST` | `/empresa/1/vendas` | `{ "identificacao": "E-6", "clienteId": 3, "funcionarioId": 1, "itens": [ { "mercadoriaId": 1, "quantidade": 1 }, { "mercadoriaId": 1, "quantidade": 2 } ] }` | 400 |
+| `POST` | `/empresa/1/vendas` | `{ "identificacao": "E-7", "clienteId": 3, "funcionarioId": 1, "itens": [ { "mercadoriaId": 1, "quantidade": 0 } ] }` | 400 |
+| `POST` | `/empresa/1/vendas` | `{ "identificacao": "E-8", "clienteId": 3, "funcionarioId": 1, "itens": [ { "mercadoriaId": 1, "quantidade": 9999 } ] }` | 409 |
+| `PUT` | `/venda/1` | `{ "veiculoId": 1, "removerVeiculo": true }` | 400 |
+| `PUT` | `/usuario/atualizar` | `{ "id": 3, "perfis": [ "FORNECEDOR" ] }` | 409 |
 | `POST` | `/usuario/cadastro` | **X** | 409 |
 | `POST` | `/usuario/3/veiculos` | `{ "tipo": "SUV", "modelo": "Yaris", "placa": "ABC0000" }` | 409 |
 | `POST` | `/usuario/1/endereco` | **K** | 409 |
@@ -691,30 +805,28 @@ Erros de validação acrescentam a lista de campos, todos de uma vez:
 | `credencial.nomeUsuario` · `senha` | obrigatórios; `nomeUsuario` é único; senha de 6 a 255 caracteres |
 | `credencial.codigo` | obrigatório, positivo e único |
 | `veiculo.tipo` · `modelo` · `placa` | obrigatórios; placa única, no formato `ABC1234` ou `ABC1D23` |
-| `mercadoria.nome` · `fabricacao` · `quantidade` · `valor` | obrigatórios; fabricação não pode estar no futuro; quantidade e valor não podem ser negativos |
+| `mercadoria.nome` · `fabricacao` · `quantidade` · `valor` | obrigatórios; fabricação não pode estar no futuro; quantidade e valor não podem ser negativos; quantidade de até 999999999 |
 | `mercadoria.validade` | opcional; não pode ser anterior à fabricação |
 | `servico.nome` · `valor` | obrigatórios; o valor não pode ser negativo |
 | `valor` de mercadoria e serviço | até 8 dígitos inteiros e 2 decimais |
 | `venda.identificacao` · `clienteId` · `funcionarioId` | obrigatórios; a identificação é única |
-| Cliente da venda | deve ter o perfil `CLIENTE` |
+| Cliente da venda | deve ter o perfil `CLIENTE`; se estiver vinculado a uma empresa, deve ser a da venda |
 | Funcionário da venda | deve ter o perfil `FUNCIONARIO` e estar vinculado à empresa da venda |
 | Veículo da venda | opcional; deve pertencer ao cliente da venda |
-| Itens da venda | ao menos uma mercadoria ou um serviço, sem repetição, todos da empresa da venda |
+| Conteúdo da venda | ao menos uma mercadoria ou um serviço, sem repetição, todos da empresa da venda |
+| `itens[].mercadoriaId` · `quantidade` | obrigatórios; a quantidade deve ser maior que zero e não pode superar o estoque |
 | Fornecedor da mercadoria | deve ter o perfil `FORNECEDOR`; a mercadoria tem um fornecedor por vez |
+| `PUT` de usuário e empresa | `endereco` exige que já exista um (para criar, use o `POST`); cada filho enviado precisa pertencer ao usuário ou à empresa |
 | Exclusão de veículo, mercadoria ou serviço | recusada se aparecer em alguma venda |
+| Retirada de perfil | `CLIENTE` e `FUNCIONARIO` não saem de quem tem vendas nesse papel; `FORNECEDOR` não sai de quem fornece mercadorias |
+| Veículo no `PUT` de venda | `veiculoId` troca e `removerVeiculo: true` remove; os dois juntos são recusados |
+| `mercadoria.quantidade` | estoque atual: muda com as vendas e pode ser reposto com `PUT /mercadoria/{id}` |
+| Vendas simultâneas | o desconto é feito pelo banco, então duas vendas não levam a mesma unidade |
+| Requisições simultâneas em conflito | a que perder a disputa responde 409 e pode ser repetida |
 | Exclusão de usuário | recusada se for cliente ou funcionário em alguma venda |
 | `dataCadastro` · `cadastro` · `criacao` | definidos pelo servidor, não aceitos na entrada |
 | Listas nos corpos | `null` dentro de uma lista é recusado; a lista inteira como `null` vale como vazia, e no `PUT /venda/{id}` vale como não enviada |
 | Tipos e perfis | aceitos somente pelo nome, nunca por número |
-
-### Limitações conhecidas
-
-- **Estoque:** a venda não baixa a quantidade da mercadoria. O diagrama não tem
-  quantidade por item, então uma venda registra cada mercadoria uma única vez.
-- **Veículo da venda:** o `PUT /venda/{id}` troca o veículo, mas não o remove.
-- **Segurança:** a credencial é apenas cadastrada, sem login, e a senha é guardada
-  em texto puro. O enunciado deixa isso para a "atualização de segurança", etapa
-  seguinte à "atualização de base".
 
 ---
 
@@ -729,6 +841,7 @@ Erros de validação acrescentam a lista de campos, todos de uma vez:
 | CRUD de mercadoria e vínculo com o fornecedor | `MercadoriaControle`, `MercadoriaServico` |
 | CRUD de serviço | `ServicoControle`, `ServicoServico` |
 | CRUD de venda, com as regras de negócio | `VendaControle`, `VendaServico` |
+| Quantidade por item da venda, controle de estoque e histórico de preços | `ItemVenda`, `ItemServico`, `VendaServico`, `MercadoriaRepositorio` |
 | Links para os novos recursos | `modelo/AdicionadorLink*` |
 | Dados de demonstração das novas entidades | `CargaInicial` |
 | Testes de todas as camadas | `src/test` |

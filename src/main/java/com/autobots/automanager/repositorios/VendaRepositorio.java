@@ -11,9 +11,13 @@ public interface VendaRepositorio extends JpaRepository<Venda, Long> {
 
     boolean existsByVeiculoId(Long veiculoId);
 
-    boolean existsByMercadoriasId(Long mercadoriaId);
+    boolean existsByItensMercadoriaId(Long mercadoriaId);
 
-    boolean existsByServicosId(Long servicoId);
+    boolean existsByItensServicoServicoId(Long servicoId);
+
+    boolean existsByClienteId(Long clienteId);
+
+    boolean existsByFuncionarioId(Long funcionarioId);
 
     List<Venda> findByClienteIdOrFuncionarioIdOrderById(Long clienteId, Long funcionarioId);
 }

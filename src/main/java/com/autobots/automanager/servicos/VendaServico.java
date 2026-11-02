@@ -1,22 +1,32 @@
 package com.autobots.automanager.servicos;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.autobots.automanager.dtos.ItemVendaCadastroDto;
 import com.autobots.automanager.dtos.VendaAtualizacaoDto;
 import com.autobots.automanager.dtos.VendaCadastroDto;
 import com.autobots.automanager.entidades.Empresa;
+import com.autobots.automanager.entidades.ItemServico;
+import com.autobots.automanager.entidades.ItemVenda;
 import com.autobots.automanager.entidades.Mercadoria;
 import com.autobots.automanager.entidades.Servico;
 import com.autobots.automanager.entidades.Usuario;
 import com.autobots.automanager.entidades.Veiculo;
 import com.autobots.automanager.entidades.Venda;
 import com.autobots.automanager.enumeracoes.PerfilUsuario;
+import com.autobots.automanager.excecoes.ConflitoException;
 import com.autobots.automanager.excecoes.RecursoNaoEncontradoException;
 import com.autobots.automanager.modelo.StringVerificadorNulo;
 import com.autobots.automanager.repositorios.EmpresaRepositorio;
@@ -62,13 +72,13 @@ public class VendaServico {
         Venda venda = new Venda();
         venda.setIdentificacao(dto.getIdentificacao());
         venda.setCadastro(Calendar.getInstance().getTime());
-        venda.setCliente(obterComPerfil(dto.getClienteId(), PerfilUsuario.CLIENTE));
+        venda.setCliente(obterCliente(dto.getClienteId(), empresa));
         venda.setFuncionario(obterFuncionario(dto.getFuncionarioId(), empresa));
         if (dto.getVeiculoId() != null) {
             venda.setVeiculo(obterVeiculo(dto.getVeiculoId()));
         }
-        venda.setMercadorias(obterMercadorias(dto.getMercadoriaIds(), empresa));
-        venda.setServicos(obterServicos(dto.getServicoIds(), empresa));
+        adicionarItens(venda, dto.getItens(), empresa, Map.of());
+        adicionarServicos(venda, dto.getServicoIds(), empresa, Map.of());
         validar(venda);
         Venda criada = repositorio.save(venda);
         empresa.getVendas().add(criada);
@@ -91,19 +101,30 @@ public class VendaServico {
             venda.setIdentificacao(dto.getIdentificacao());
         }
         if (dto.getClienteId() != null) {
-            venda.setCliente(obterComPerfil(dto.getClienteId(), PerfilUsuario.CLIENTE));
+            venda.setCliente(obterCliente(dto.getClienteId(), empresa));
         }
         if (dto.getFuncionarioId() != null) {
             venda.setFuncionario(obterFuncionario(dto.getFuncionarioId(), empresa));
         }
+        if (dto.getVeiculoId() != null && Boolean.TRUE.equals(dto.getRemoverVeiculo())) {
+            throw new IllegalArgumentException("Informe veiculoId ou removerVeiculo, nao os dois");
+        }
         if (dto.getVeiculoId() != null) {
             venda.setVeiculo(obterVeiculo(dto.getVeiculoId()));
         }
-        if (dto.getMercadoriaIds() != null) {
-            venda.setMercadorias(obterMercadorias(dto.getMercadoriaIds(), empresa));
+        if (Boolean.TRUE.equals(dto.getRemoverVeiculo())) {
+            venda.setVeiculo(null);
+        }
+        if (dto.getItens() != null) {
+            Map<Long, BigDecimal> valoresOriginais = valoresDosItens(venda);
+            devolverEstoque(venda);
+            venda.getItens().clear();
+            adicionarItens(venda, dto.getItens(), empresa, valoresOriginais);
         }
         if (dto.getServicoIds() != null) {
-            venda.setServicos(obterServicos(dto.getServicoIds(), empresa));
+            Map<Long, BigDecimal> valoresOriginais = valoresDosServicos(venda);
+            venda.getItensServico().clear();
+            adicionarServicos(venda, dto.getServicoIds(), empresa, valoresOriginais);
         }
         validar(venda);
         return repositorio.save(venda);
@@ -111,11 +132,13 @@ public class VendaServico {
 
     @Transactional
     public void excluir(long id) {
-        repositorio.delete(obterPorId(id));
+        Venda venda = obterPorId(id);
+        devolverEstoque(venda);
+        repositorio.delete(venda);
     }
 
     private void validar(Venda venda) {
-        if (venda.getMercadorias().isEmpty() && venda.getServicos().isEmpty()) {
+        if (venda.getItens().isEmpty() && venda.getServicos().isEmpty()) {
             throw new IllegalArgumentException("A venda deve ter ao menos uma mercadoria ou um servico");
         }
         Veiculo veiculo = venda.getVeiculo();
@@ -134,6 +157,15 @@ public class VendaServico {
         return usuario;
     }
 
+    private Usuario obterCliente(long usuarioId, Empresa empresa) {
+        Usuario cliente = obterComPerfil(usuarioId, PerfilUsuario.CLIENTE);
+        if (cliente.getEmpresa() != null && !cliente.getEmpresa().getId().equals(empresa.getId())) {
+            throw new IllegalArgumentException("O cliente de id " + usuarioId
+                    + " esta vinculado a empresa de id " + cliente.getEmpresa().getId());
+        }
+        return cliente;
+    }
+
     private Usuario obterFuncionario(long usuarioId, Empresa empresa) {
         Usuario funcionario = obterComPerfil(usuarioId, PerfilUsuario.FUNCIONARIO);
         if (funcionario.getEmpresa() == null || !funcionario.getEmpresa().getId().equals(empresa.getId())) {
@@ -143,22 +175,59 @@ public class VendaServico {
         return funcionario;
     }
 
-    private List<Mercadoria> obterMercadorias(List<Long> ids, Empresa empresa) {
-        List<Mercadoria> mercadorias = new ArrayList<>();
-        for (Long id : ids) {
-            Mercadoria mercadoria = mercadoriaRepositorio.findById(id)
-                    .orElseThrow(() -> new RecursoNaoEncontradoException("Mercadoria", id));
-            if (empresa.getMercadorias().stream().noneMatch(item -> item.getId().equals(id))) {
+    private void adicionarItens(Venda venda, List<ItemVendaCadastroDto> itens, Empresa empresa,
+            Map<Long, BigDecimal> valoresOriginais) {
+        List<ItemVendaCadastroDto> ordenados = new ArrayList<>(itens);
+        ordenados.sort(Comparator.comparing(ItemVendaCadastroDto::getMercadoriaId));
+        Set<Long> informadas = new HashSet<>();
+        for (ItemVendaCadastroDto item : ordenados) {
+            Long id = item.getMercadoriaId();
+            if (!informadas.add(id)) {
                 throw new IllegalArgumentException("A mercadoria de id " + id
-                        + " nao pertence a empresa de id " + empresa.getId());
+                        + " foi informada mais de uma vez");
             }
-            mercadorias.add(mercadoria);
+            Mercadoria mercadoria = obterMercadoria(id, empresa);
+            if (mercadoriaRepositorio.baixarEstoque(id, item.getQuantidade()) == 0) {
+                throw new ConflitoException("Estoque insuficiente para a mercadoria de id " + id
+                        + ". Quantidade solicitada: " + item.getQuantidade());
+            }
+            ItemVenda novo = new ItemVenda();
+            novo.setVenda(venda);
+            novo.setMercadoria(mercadoria);
+            novo.setQuantidade(item.getQuantidade());
+            novo.setValorUnitario(valoresOriginais.getOrDefault(id, mercadoria.getValor()));
+            venda.getItens().add(novo);
         }
-        return mercadorias;
     }
 
-    private List<Servico> obterServicos(List<Long> ids, Empresa empresa) {
-        List<Servico> servicos = new ArrayList<>();
+    private Map<Long, BigDecimal> valoresDosItens(Venda venda) {
+        Map<Long, BigDecimal> valores = new HashMap<>();
+        for (ItemVenda item : venda.getItens()) {
+            valores.put(item.getMercadoria().getId(), item.getValorUnitario());
+        }
+        return valores;
+    }
+
+    private void devolverEstoque(Venda venda) {
+        List<ItemVenda> ordenados = new ArrayList<>(venda.getItens());
+        ordenados.sort(Comparator.comparing(item -> item.getMercadoria().getId()));
+        for (ItemVenda item : ordenados) {
+            mercadoriaRepositorio.devolverEstoque(item.getMercadoria().getId(), item.getQuantidade());
+        }
+    }
+
+    private Mercadoria obterMercadoria(long id, Empresa empresa) {
+        Mercadoria mercadoria = mercadoriaRepositorio.findById(id)
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Mercadoria", id));
+        if (empresa.getMercadorias().stream().noneMatch(item -> item.getId().equals(id))) {
+            throw new IllegalArgumentException("A mercadoria de id " + id
+                    + " nao pertence a empresa de id " + empresa.getId());
+        }
+        return mercadoria;
+    }
+
+    private void adicionarServicos(Venda venda, List<Long> ids, Empresa empresa,
+            Map<Long, BigDecimal> valoresOriginais) {
         for (Long id : ids) {
             Servico servico = servicoRepositorio.findById(id)
                     .orElseThrow(() -> new RecursoNaoEncontradoException("Servico", id));
@@ -166,9 +235,20 @@ public class VendaServico {
                 throw new IllegalArgumentException("O servico de id " + id
                         + " nao pertence a empresa de id " + empresa.getId());
             }
-            servicos.add(servico);
+            ItemServico novo = new ItemServico();
+            novo.setVenda(venda);
+            novo.setServico(servico);
+            novo.setValorUnitario(valoresOriginais.getOrDefault(id, servico.getValor()));
+            venda.getItensServico().add(novo);
         }
-        return servicos;
+    }
+
+    private Map<Long, BigDecimal> valoresDosServicos(Venda venda) {
+        Map<Long, BigDecimal> valores = new HashMap<>();
+        for (ItemServico item : venda.getItensServico()) {
+            valores.put(item.getServico().getId(), item.getValorUnitario());
+        }
+        return valores;
     }
 
     private Empresa obterEmpresa(long empresaId) {

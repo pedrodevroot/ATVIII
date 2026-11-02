@@ -1,5 +1,6 @@
 package com.autobots.automanager.dtos;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -18,6 +19,7 @@ public class VendaRespostaDto extends RepresentationModel<VendaRespostaDto> {
     private Long clienteId;
     private Long funcionarioId;
     private Long veiculoId;
-    private List<MercadoriaDto> mercadorias = new ArrayList<>();
+    private BigDecimal valorTotal;
+    private List<ItemVendaDto> itens = new ArrayList<>();
     private List<ServicoDto> servicos = new ArrayList<>();
 }

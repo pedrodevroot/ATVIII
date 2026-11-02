@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.util.Date;
 
 import javax.validation.constraints.Digits;
+import javax.validation.constraints.Max;
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotNull;
 import javax.validation.constraints.PastOrPresent;
@@ -30,6 +31,7 @@ public class MercadoriaCadastroDto {
 
     @NotNull(message = "A quantidade e obrigatoria")
     @PositiveOrZero(message = "A quantidade nao pode ser negativa")
+    @Max(value = 999999999, message = "A quantidade nao pode passar de 999999999")
     private Long quantidade;
 
     @NotNull(message = "O valor e obrigatorio")

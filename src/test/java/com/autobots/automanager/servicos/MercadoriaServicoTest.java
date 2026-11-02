@@ -183,7 +183,7 @@ class MercadoriaServicoTest {
     void excluirSemVendas() {
         Mercadoria existente = mercadoria(10L);
         when(repositorio.findById(10L)).thenReturn(Optional.of(existente));
-        when(vendaRepositorio.existsByMercadoriasId(10L)).thenReturn(false);
+        when(vendaRepositorio.existsByItensMercadoriaId(10L)).thenReturn(false);
 
         servico.excluir(10L);
 
@@ -194,7 +194,7 @@ class MercadoriaServicoTest {
     @DisplayName("excluir: lanca Conflito quando a mercadoria possui vendas")
     void excluirComVendas() {
         when(repositorio.findById(10L)).thenReturn(Optional.of(mercadoria(10L)));
-        when(vendaRepositorio.existsByMercadoriasId(10L)).thenReturn(true);
+        when(vendaRepositorio.existsByItensMercadoriaId(10L)).thenReturn(true);
 
         ConflitoException excecao = assertThrows(ConflitoException.class, () -> servico.excluir(10L));
 

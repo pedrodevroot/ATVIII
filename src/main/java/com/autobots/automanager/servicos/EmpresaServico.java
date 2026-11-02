@@ -9,15 +9,18 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.autobots.automanager.entidades.Empresa;
+import com.autobots.automanager.entidades.Telefone;
 import com.autobots.automanager.entidades.Usuario;
 import com.autobots.automanager.excecoes.ConflitoException;
 import com.autobots.automanager.excecoes.RecursoNaoEncontradoException;
 import com.autobots.automanager.modelo.EmpresaAtualizador;
+import com.autobots.automanager.modelo.VerificadorVinculo;
 import com.autobots.automanager.repositorios.EmpresaRepositorio;
 import com.autobots.automanager.repositorios.UsuarioRepositorio;
 
 @Service
 public class EmpresaServico {
+    private VerificadorVinculo verificador = new VerificadorVinculo();
 
     @Autowired
     private EmpresaRepositorio repositorio;
@@ -49,6 +52,7 @@ public class EmpresaServico {
                     "O id da empresa e obrigatorio para atualizacao");
         }
         Empresa empresa = obterPorId(atualizacao.getId());
+        verificarVinculos(empresa, atualizacao);
         atualizador.atualizar(empresa, atualizacao);
         return repositorio.save(empresa);
     }
@@ -59,6 +63,8 @@ public class EmpresaServico {
         for (Usuario usuario : empresa.getUsuarios()) {
             usuario.setEmpresa(null);
         }
+        empresa.getVendas().clear();
+        repositorio.saveAndFlush(empresa);
         repositorio.delete(empresa);
     }
 
@@ -93,6 +99,16 @@ public class EmpresaServico {
         }
         usuario.setEmpresa(null);
         usuarioRepositorio.save(usuario);
+    }
+
+    private void verificarVinculos(Empresa empresa, Empresa atualizacao) {
+        Long id = empresa.getId();
+        if (atualizacao.getEndereco() != null && empresa.getEndereco() == null) {
+            throw new RecursoNaoEncontradoException("A empresa de id " + id
+                    + " nao possui endereco. Para cadastrar, use POST /empresa/" + id + "/endereco");
+        }
+        verificador.verificar(empresa.getTelefones(), atualizacao.getTelefones(),
+                Telefone::getId, "O telefone", "a empresa de id " + id);
     }
 
     private Usuario obterUsuario(long usuarioId) {

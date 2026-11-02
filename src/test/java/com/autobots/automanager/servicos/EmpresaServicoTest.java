@@ -25,6 +25,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Sort;
 
 import com.autobots.automanager.entidades.Empresa;
+import com.autobots.automanager.entidades.Endereco;
+import com.autobots.automanager.entidades.Telefone;
 import com.autobots.automanager.entidades.Usuario;
 import com.autobots.automanager.excecoes.ConflitoException;
 import com.autobots.automanager.excecoes.RecursoNaoEncontradoException;
@@ -140,6 +142,7 @@ class EmpresaServicoTest {
         assertNull(segundo.getEmpresa());
         InOrder ordem = inOrder(repositorio);
         ordem.verify(repositorio).findById(1L);
+        ordem.verify(repositorio).saveAndFlush(existente);
         ordem.verify(repositorio).delete(existente);
     }
 
@@ -259,5 +262,36 @@ class EmpresaServicoTest {
         assertThrows(RecursoNaoEncontradoException.class, () -> servico.desvincularUsuario(1L, 5L));
 
         verify(usuarioRepositorio, never()).save(any(Usuario.class));
+    }
+
+    @Test
+    @DisplayName("atualizar: recusa endereco quando a empresa ainda nao tem um")
+    void atualizarEnderecoInexistente() {
+        Empresa atualizacao = empresa(1L, "Nova");
+        atualizacao.setEndereco(new Endereco());
+        when(repositorio.findById(1L)).thenReturn(Optional.of(empresa(1L, "Antiga")));
+
+        RecursoNaoEncontradoException excecao = assertThrows(
+                RecursoNaoEncontradoException.class, () -> servico.atualizar(atualizacao));
+
+        assertEquals("A empresa de id 1 nao possui endereco. Para cadastrar, use POST /empresa/1/endereco",
+                excecao.getMessage());
+        verify(repositorio, never()).save(any(Empresa.class));
+    }
+
+    @Test
+    @DisplayName("atualizar: recusa telefone que nao pertence a empresa")
+    void atualizarTelefoneAlheio() {
+        Empresa atualizacao = empresa(1L, "Nova");
+        Telefone telefone = new Telefone();
+        telefone.setId(99L);
+        atualizacao.getTelefones().add(telefone);
+        when(repositorio.findById(1L)).thenReturn(Optional.of(empresa(1L, "Antiga")));
+
+        RecursoNaoEncontradoException excecao = assertThrows(
+                RecursoNaoEncontradoException.class, () -> servico.atualizar(atualizacao));
+
+        assertEquals("O telefone de id 99 nao pertence a empresa de id 1", excecao.getMessage());
+        verify(repositorio, never()).save(any(Empresa.class));
     }
 }

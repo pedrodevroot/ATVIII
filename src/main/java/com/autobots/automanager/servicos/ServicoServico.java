@@ -56,7 +56,7 @@ public class ServicoServico {
     @Transactional
     public void excluir(long id) {
         Servico servico = obterPorId(id);
-        if (vendaRepositorio.existsByServicosId(id)) {
+        if (vendaRepositorio.existsByItensServicoServicoId(id)) {
             throw new ConflitoException("O servico de id " + id
                     + " possui vendas registradas e nao pode ser excluido");
         }

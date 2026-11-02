@@ -67,7 +67,7 @@ public class MercadoriaServico {
     @Transactional
     public void excluir(long id) {
         Mercadoria mercadoria = obterPorId(id);
-        if (vendaRepositorio.existsByMercadoriasId(id)) {
+        if (vendaRepositorio.existsByItensMercadoriaId(id)) {
             throw new ConflitoException("A mercadoria de id " + id
                     + " possui vendas registradas e nao pode ser excluida");
         }

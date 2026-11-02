@@ -17,6 +17,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.math.BigDecimal;
 import java.util.Date;
 import java.util.List;
 
@@ -27,17 +28,22 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.http.MediaType;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.autobots.automanager.conversores.VendaConversor;
 import com.autobots.automanager.dtos.VendaAtualizacaoDto;
 import com.autobots.automanager.dtos.VendaCadastroDto;
+import com.autobots.automanager.entidades.ItemServico;
+import com.autobots.automanager.entidades.ItemVenda;
 import com.autobots.automanager.entidades.Mercadoria;
 import com.autobots.automanager.entidades.Servico;
 import com.autobots.automanager.entidades.Usuario;
 import com.autobots.automanager.entidades.Veiculo;
 import com.autobots.automanager.entidades.Venda;
+import com.autobots.automanager.excecoes.ConflitoException;
 import com.autobots.automanager.excecoes.RecursoNaoEncontradoException;
 import com.autobots.automanager.modelo.AdicionadorLinkVenda;
 import com.autobots.automanager.servicos.VendaServico;
@@ -48,7 +54,7 @@ class VendaControleTest {
 
     private static final String CORPO = """
             { "identificacao": "V-1", "clienteId": 3, "funcionarioId": 1, "veiculoId": 5,
-              "mercadoriaIds": [ 10 ], "servicoIds": [ 20 ] }
+              "itens": [ { "mercadoriaId": 10, "quantidade": 4 } ], "servicoIds": [ 20 ] }
             """;
 
     @Autowired
@@ -72,10 +78,19 @@ class VendaControleTest {
         venda.setFuncionario(usuario(1L));
         Mercadoria mercadoria = new Mercadoria();
         mercadoria.setId(10L);
-        venda.getMercadorias().add(mercadoria);
+        mercadoria.setNome("Pneu");
+        ItemVenda itemVenda = new ItemVenda();
+        itemVenda.setId(30L);
+        itemVenda.setMercadoria(mercadoria);
+        itemVenda.setQuantidade(4);
+        itemVenda.setValorUnitario(new BigDecimal("300.00"));
+        venda.getItens().add(itemVenda);
         Servico item = new Servico();
         item.setId(20L);
-        venda.getServicos().add(item);
+        ItemServico itemServico = new ItemServico();
+        itemServico.setServico(item);
+        itemServico.setValorUnitario(new BigDecimal("50.00"));
+        venda.getItensServico().add(itemServico);
         return venda;
     }
 
@@ -133,8 +148,14 @@ class VendaControleTest {
                 .andExpect(jsonPath("$._links.cliente.href").value("http://localhost/usuario/3"))
                 .andExpect(jsonPath("$._links.funcionario.href").value("http://localhost/usuario/1"))
                 .andExpect(jsonPath("$._links.veiculo.href").value("http://localhost/veiculo/5"))
-                .andExpect(jsonPath("$.mercadorias[0]._links.self.href").value("http://localhost/mercadoria/10"))
-                .andExpect(jsonPath("$.servicos[0]._links.self.href").value("http://localhost/servico/20"));
+                .andExpect(jsonPath("$.itens[0].mercadoriaId").value(10))
+                .andExpect(jsonPath("$.itens[0].nome").value("Pneu"))
+                .andExpect(jsonPath("$.itens[0].quantidade").value(4))
+                .andExpect(jsonPath("$.itens[0].valorUnitario").value(300.0))
+                .andExpect(jsonPath("$.itens[0]._links.mercadoria.href").value("http://localhost/mercadoria/10"))
+                .andExpect(jsonPath("$.servicos[0]._links.self.href").value("http://localhost/servico/20"))
+                .andExpect(jsonPath("$.servicos[0].valor").value(50.0))
+                .andExpect(jsonPath("$.valorTotal").value(1250.0));
     }
 
     @Test
@@ -154,14 +175,12 @@ class VendaControleTest {
     @DisplayName("POST /empresa/{id}/vendas: 400 quando um item e repetido")
     void criarItemRepetido() throws Exception {
         String corpo = """
-                { "identificacao": "V-1", "clienteId": 3, "funcionarioId": 1,
-                  "mercadoriaIds": [ 10, 10 ], "servicoIds": [ 20, 20 ] }
+                { "identificacao": "V-1", "clienteId": 3, "funcionarioId": 1, "servicoIds": [ 20, 20 ] }
                 """;
 
         requisicao.perform(post("/empresa/1/vendas")
                 .contentType(MediaType.APPLICATION_JSON).content(corpo))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.erros[*].campo", hasItem("mercadoriaIds")))
                 .andExpect(jsonPath("$.erros[*].campo", hasItem("servicoIds")));
 
         verifyNoInteractions(servico);
@@ -249,7 +268,7 @@ class VendaControleTest {
 
         String corpo = """
                 { "identificacao": "V-1", "clienteId": 3, "funcionarioId": 1,
-                  "mercadoriaIds": null, "servicoIds": null }
+                  "itens": null, "servicoIds": null }
                 """;
 
         requisicao.perform(post("/empresa/1/vendas")
@@ -258,7 +277,7 @@ class VendaControleTest {
 
         ArgumentCaptor<VendaCadastroDto> captor = ArgumentCaptor.forClass(VendaCadastroDto.class);
         verify(servico).criar(anyLong(), captor.capture());
-        assertTrue(captor.getValue().getMercadoriaIds().isEmpty());
+        assertTrue(captor.getValue().getItens().isEmpty());
         assertTrue(captor.getValue().getServicoIds().isEmpty());
     }
 
@@ -267,13 +286,13 @@ class VendaControleTest {
     void criarComIdNulo() throws Exception {
         String corpo = """
                 { "identificacao": "V-1", "clienteId": 3, "funcionarioId": 1,
-                  "mercadoriaIds": [ null ], "servicoIds": [ null ] }
+                  "itens": [ null ], "servicoIds": [ null ] }
                 """;
 
         requisicao.perform(post("/empresa/1/vendas")
                 .contentType(MediaType.APPLICATION_JSON).content(corpo))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.erros[*].campo", hasItem("mercadoriaIds[0]")))
+                .andExpect(jsonPath("$.erros[*].campo", hasItem("itens[0]")))
                 .andExpect(jsonPath("$.erros[*].campo", hasItem("servicoIds[0]")));
 
         verifyNoInteractions(servico);
@@ -286,12 +305,106 @@ class VendaControleTest {
 
         requisicao.perform(put("/venda/100")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{ \"mercadoriaIds\": null, \"servicoIds\": null }"))
+                .content("{ \"itens\": null, \"servicoIds\": null }"))
                 .andExpect(status().isOk());
 
         ArgumentCaptor<VendaAtualizacaoDto> captor = ArgumentCaptor.forClass(VendaAtualizacaoDto.class);
         verify(servico).atualizar(anyLong(), captor.capture());
-        assertNull(captor.getValue().getMercadoriaIds());
+        assertNull(captor.getValue().getItens());
         assertNull(captor.getValue().getServicoIds());
+    }
+
+    @Test
+    @DisplayName("POST /empresa/{id}/vendas: 400 quando o item nao informa mercadoria nem quantidade")
+    void criarItemIncompleto() throws Exception {
+        String corpo = """
+                { "identificacao": "V-1", "clienteId": 3, "funcionarioId": 1, "itens": [ { } ] }
+                """;
+
+        requisicao.perform(post("/empresa/1/vendas")
+                .contentType(MediaType.APPLICATION_JSON).content(corpo))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.erros[*].campo", hasItem("itens[0].mercadoriaId")))
+                .andExpect(jsonPath("$.erros[*].campo", hasItem("itens[0].quantidade")));
+
+        verifyNoInteractions(servico);
+    }
+
+    @Test
+    @DisplayName("POST /empresa/{id}/vendas: 400 quando a quantidade do item nao e positiva")
+    void criarQuantidadeInvalida() throws Exception {
+        for (String quantidade : List.of("0", "-1")) {
+            requisicao.perform(post("/empresa/1/vendas")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{ \"identificacao\": \"V-1\", \"clienteId\": 3, \"funcionarioId\": 1, "
+                            + "\"itens\": [ { \"mercadoriaId\": 10, \"quantidade\": " + quantidade + " } ] }"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.erros[0].mensagem").value("A quantidade do item deve ser maior que zero"));
+        }
+
+        verifyNoInteractions(servico);
+    }
+
+    @Test
+    @DisplayName("POST /empresa/{id}/vendas: 409 quando o estoque e insuficiente")
+    void criarEstoqueInsuficiente() throws Exception {
+        String mensagem = "Estoque insuficiente para a mercadoria de id 10. Quantidade solicitada: 4";
+        when(servico.criar(anyLong(), any(VendaCadastroDto.class))).thenThrow(new ConflitoException(mensagem));
+
+        requisicao.perform(post("/empresa/1/vendas")
+                .contentType(MediaType.APPLICATION_JSON).content(CORPO))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.mensagem").value(mensagem));
+    }
+
+    @Test
+    @DisplayName("PUT /venda/{id}: 400 quando a quantidade do item nao e positiva")
+    void atualizarQuantidadeInvalida() throws Exception {
+        requisicao.perform(put("/venda/100")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{ \"itens\": [ { \"mercadoriaId\": 10, \"quantidade\": 0 } ] }"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.erros[*].campo", hasItem("itens[0].quantidade")));
+
+        verifyNoInteractions(servico);
+    }
+
+    @Test
+    @DisplayName("POST /empresa/{id}/vendas: 409 quando o banco interrompe a operacao por conflito simultaneo")
+    void criarComDeadlock() throws Exception {
+        when(servico.criar(anyLong(), any(VendaCadastroDto.class)))
+                .thenThrow(new CannotAcquireLockException("deadlock detected"));
+
+        requisicao.perform(post("/empresa/1/vendas")
+                .contentType(MediaType.APPLICATION_JSON).content(CORPO))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.mensagem").value(
+                        "A operacao conflitou com outra requisicao simultanea. Tente novamente."));
+    }
+
+    @Test
+    @DisplayName("DELETE /venda/{id}: 409 quando outra requisicao alterou a venda ao mesmo tempo")
+    void excluirComConflitoSimultaneo() throws Exception {
+        doThrow(new ObjectOptimisticLockingFailureException(Venda.class, 100L)).when(servico).excluir(100L);
+
+        requisicao.perform(delete("/venda/100"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.mensagem").value(
+                        "A operacao conflitou com outra requisicao simultanea. Tente novamente."));
+    }
+
+    @Test
+    @DisplayName("PUT /venda/{id}: repassa removerVeiculo ao servico")
+    void atualizarRemoverVeiculo() throws Exception {
+        when(servico.atualizar(anyLong(), any(VendaAtualizacaoDto.class))).thenReturn(venda(100L));
+
+        requisicao.perform(put("/venda/100")
+                .contentType(MediaType.APPLICATION_JSON).content("{ \"removerVeiculo\": true }"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$._links.veiculo").doesNotExist());
+
+        ArgumentCaptor<VendaAtualizacaoDto> captor = ArgumentCaptor.forClass(VendaAtualizacaoDto.class);
+        verify(servico).atualizar(anyLong(), captor.capture());
+        assertTrue(captor.getValue().getRemoverVeiculo());
     }
 }

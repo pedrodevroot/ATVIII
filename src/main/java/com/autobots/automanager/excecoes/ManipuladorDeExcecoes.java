@@ -7,6 +7,7 @@ import java.util.List;
 
 import javax.servlet.http.HttpServletRequest;
 
+import org.springframework.dao.ConcurrencyFailureException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -53,6 +54,14 @@ public class ManipuladorDeExcecoes {
     public ResponseEntity<ErroResposta> tratarConflito(
             ConflitoException excecao, HttpServletRequest requisicao) {
         return montar(HttpStatus.CONFLICT, excecao.getMessage(), null, requisicao);
+    }
+
+    @ExceptionHandler(ConcurrencyFailureException.class)
+    public ResponseEntity<ErroResposta> tratarConflitoSimultaneo(
+            ConcurrencyFailureException excecao, HttpServletRequest requisicao) {
+        return montar(HttpStatus.CONFLICT,
+                "A operacao conflitou com outra requisicao simultanea. Tente novamente.",
+                null, requisicao);
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)

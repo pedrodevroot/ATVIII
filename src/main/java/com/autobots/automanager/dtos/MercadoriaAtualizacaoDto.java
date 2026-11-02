@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.util.Date;
 
 import javax.validation.constraints.Digits;
+import javax.validation.constraints.Max;
 import javax.validation.constraints.PastOrPresent;
 import javax.validation.constraints.PositiveOrZero;
 import javax.validation.constraints.Size;
@@ -25,6 +26,7 @@ public class MercadoriaAtualizacaoDto {
     private Date validade;
 
     @PositiveOrZero(message = "A quantidade nao pode ser negativa")
+    @Max(value = 999999999, message = "A quantidade nao pode passar de 999999999")
     private Long quantidade;
 
     @PositiveOrZero(message = "O valor nao pode ser negativo")

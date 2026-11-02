@@ -71,12 +71,22 @@ class IntegracaoVendaTest {
         return funcionario;
     }
 
+    private long estoque(long mercadoria) throws Exception {
+        String resposta = requisicao.perform(get("/mercadoria/" + mercadoria))
+                .andReturn().getResponse().getContentAsString();
+        return ((Number) JsonPath.read(resposta, "$.quantidade")).longValue();
+    }
+
+    private String itens(long mercadoria, long quantidade) {
+        return "\"itens\": [ { \"mercadoriaId\": " + mercadoria + ", \"quantidade\": " + quantidade + " } ]";
+    }
+
     private String venda(String identificacao, long cliente, long funcionario, Long veiculo, long mercadoria,
             long servico) {
         return "{ \"identificacao\": \"" + identificacao + "\", \"clienteId\": " + cliente
                 + ", \"funcionarioId\": " + funcionario
                 + (veiculo == null ? "" : ", \"veiculoId\": " + veiculo)
-                + ", \"mercadoriaIds\": [ " + mercadoria + " ], \"servicoIds\": [ " + servico + " ] }";
+                + ", \"itens\": [ { \"mercadoriaId\": " + mercadoria + ", \"quantidade\": 1 } ], \"servicoIds\": [ " + servico + " ] }";
     }
 
     @Test
@@ -203,7 +213,7 @@ class IntegracaoVendaTest {
                 .andExpect(jsonPath("$.clienteId").value(cliente))
                 .andExpect(jsonPath("$.funcionarioId").value(funcionario))
                 .andExpect(jsonPath("$.veiculoId").value(carro))
-                .andExpect(jsonPath("$.mercadorias[0].nome").value("Pneu"))
+                .andExpect(jsonPath("$.itens[0].nome").value("Pneu"))
                 .andExpect(jsonPath("$.servicos[0].nome").value("Alinhamento"))
                 .andReturn().getResponse().getContentAsString();
         assertEquals("http://localhost/usuario/" + cliente, JsonPath.read(resposta, "$._links.cliente.href"));
@@ -219,10 +229,10 @@ class IntegracaoVendaTest {
         requisicao.perform(delete("/veiculo/" + carro)).andExpect(status().isConflict());
         requisicao.perform(delete("/usuario/excluir/" + cliente)).andExpect(status().isConflict());
 
-        enviarPut("/venda/" + id, "{ \"identificacao\": \"CICLO-2\", \"mercadoriaIds\": [] }")
+        enviarPut("/venda/" + id, "{ \"identificacao\": \"CICLO-2\", \"itens\": [] }")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.identificacao").value("CICLO-2"))
-                .andExpect(jsonPath("$.mercadorias.length()").value(0))
+                .andExpect(jsonPath("$.itens.length()").value(0))
                 .andExpect(jsonPath("$.servicos.length()").value(1));
         enviarPut("/venda/" + id, "{ \"servicoIds\": [] }")
                 .andExpect(status().isBadRequest());
@@ -278,7 +288,8 @@ class IntegracaoVendaTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.mensagem").value("A venda deve ter ao menos uma mercadoria ou um servico"));
         enviarPost(url, "{ \"identificacao\": \"R9\", \"clienteId\": " + cliente + ", \"funcionarioId\": "
-                + funcionario + ", \"mercadoriaIds\": [ " + mercadoria + ", " + mercadoria + " ] }")
+                + funcionario + ", \"itens\": [ { \"mercadoriaId\": " + mercadoria + ", \"quantidade\": 1 }, "
+                + "{ \"mercadoriaId\": " + mercadoria + ", \"quantidade\": 2 } ] }")
                 .andExpect(status().isBadRequest());
         enviarPost(url, "{ \"clienteId\": " + cliente + " }")
                 .andExpect(status().isBadRequest());
@@ -300,13 +311,13 @@ class IntegracaoVendaTest {
                 .andExpect(jsonPath("$.veiculoId").value(carro));
         enviarPut("/venda/" + id, "{ \"clienteId\": " + outroCliente + " }")
                 .andExpect(status().isBadRequest());
-        enviarPut("/venda/" + id, "{ \"mercadoriaIds\": [ " + mercadoriaDeOutra + " ] }")
+        enviarPut("/venda/" + id, "{ \"itens\": [ { \"mercadoriaId\": " + mercadoriaDeOutra + ", \"quantidade\": 1 } ] }")
                 .andExpect(status().isBadRequest());
         enviarPut("/venda/999999", "{ \"identificacao\": \"X\" }")
                 .andExpect(status().isNotFound());
         requisicao.perform(get("/venda/" + id))
                 .andExpect(jsonPath("$.clienteId").value(cliente))
-                .andExpect(jsonPath("$.mercadorias[0].id").value(mercadoria));
+                .andExpect(jsonPath("$.itens[0].mercadoriaId").value(mercadoria));
     }
 
     @Test
@@ -348,7 +359,7 @@ class IntegracaoVendaTest {
 
         String venda = requisicao.perform(get((String) JsonPath.read(vendas, "$[0].links[0].href")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.mercadorias[0]._links.self.href").exists())
+                .andExpect(jsonPath("$.itens[0]._links.mercadoria.href").exists())
                 .andExpect(jsonPath("$.servicos[0]._links.self.href").exists())
                 .andReturn().getResponse().getContentAsString();
         requisicao.perform(get((String) JsonPath.read(venda, "$._links.funcionario.href")))
@@ -398,14 +409,311 @@ class IntegracaoVendaTest {
         String url = "/empresa/" + empresa + "/vendas";
 
         long id = criar(url, "{ \"identificacao\": \"NULA-1\", \"clienteId\": " + cliente
-                + ", \"funcionarioId\": " + funcionario + ", \"mercadoriaIds\": null, \"servicoIds\": [ " + servico + " ] }");
+                + ", \"funcionarioId\": " + funcionario + ", \"itens\": null, \"servicoIds\": [ " + servico + " ] }");
         enviarPost(url, "{ \"identificacao\": \"NULA-2\", \"clienteId\": " + cliente
-                + ", \"funcionarioId\": " + funcionario + ", \"mercadoriaIds\": null, \"servicoIds\": null }")
+                + ", \"funcionarioId\": " + funcionario + ", \"itens\": null, \"servicoIds\": null }")
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.mensagem").value("A venda deve ter ao menos uma mercadoria ou um servico"));
 
-        enviarPut("/venda/" + id, "{ \"mercadoriaIds\": null, \"servicoIds\": null }")
+        enviarPut("/venda/" + id, "{ \"itens\": null, \"servicoIds\": null }")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.servicos.length()").value(1));
+    }
+
+    @Test
+    @DisplayName("estoque: a venda baixa a quantidade, o PUT ajusta e o DELETE devolve")
+    void cicloDoEstoque() throws Exception {
+        long empresa = empresa();
+        long cliente = usuario("CLIENTE");
+        long funcionario = funcionarioDa(empresa);
+        long mercadoria = criar("/empresa/" + empresa + "/mercadorias", MERCADORIA);
+        long servico = criar("/empresa/" + empresa + "/servicos", SERVICO);
+        String pessoas = "\"clienteId\": " + cliente + ", \"funcionarioId\": " + funcionario;
+        String url = "/empresa/" + empresa + "/vendas";
+        assertEquals(10, estoque(mercadoria));
+
+        long id = criar(url, "{ \"identificacao\": \"EST-1\", " + pessoas + ", " + itens(mercadoria, 4) + " }");
+        assertEquals(6, estoque(mercadoria));
+        requisicao.perform(get("/venda/" + id))
+                .andExpect(jsonPath("$.itens.length()").value(1))
+                .andExpect(jsonPath("$.itens[0].quantidade").value(4));
+
+        enviarPost(url, "{ \"identificacao\": \"EST-2\", " + pessoas + ", " + itens(mercadoria, 7) + " }")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.mensagem").value("Estoque insuficiente para a mercadoria de id "
+                        + mercadoria + ". Quantidade solicitada: 7"));
+        assertEquals(6, estoque(mercadoria));
+
+        enviarPut("/venda/" + id, "{ " + itens(mercadoria, 9) + " }")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.itens.length()").value(1))
+                .andExpect(jsonPath("$.itens[0].id").exists())
+                .andExpect(jsonPath("$.itens[0].quantidade").value(9));
+        assertEquals(1, estoque(mercadoria));
+        requisicao.perform(get("/venda/" + id))
+                .andExpect(jsonPath("$.itens.length()").value(1));
+
+        enviarPut("/venda/" + id, "{ " + itens(mercadoria, 11) + " }")
+                .andExpect(status().isConflict());
+        assertEquals(1, estoque(mercadoria));
+        requisicao.perform(get("/venda/" + id))
+                .andExpect(jsonPath("$.itens[0].quantidade").value(9));
+
+        enviarPut("/venda/" + id, "{ \"itens\": [], \"servicoIds\": [ " + servico + " ] }")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.itens.length()").value(0));
+        assertEquals(10, estoque(mercadoria));
+
+        enviarPut("/venda/" + id, "{ " + itens(mercadoria, 10) + " }")
+                .andExpect(status().isOk());
+        assertEquals(0, estoque(mercadoria));
+        enviarPost(url, "{ \"identificacao\": \"EST-3\", " + pessoas + ", " + itens(mercadoria, 1) + " }")
+                .andExpect(status().isConflict());
+
+        requisicao.perform(delete("/venda/" + id)).andExpect(status().isNoContent());
+        assertEquals(10, estoque(mercadoria));
+    }
+
+    @Test
+    @DisplayName("estoque: se um item falha, nenhum outro da mesma venda e descontado")
+    void vendaComEstoqueParcial() throws Exception {
+        long empresa = empresa();
+        long cliente = usuario("CLIENTE");
+        long funcionario = funcionarioDa(empresa);
+        long primeira = criar("/empresa/" + empresa + "/mercadorias", MERCADORIA);
+        long segunda = criar("/empresa/" + empresa + "/mercadorias", MERCADORIA);
+        String pessoas = "\"clienteId\": " + cliente + ", \"funcionarioId\": " + funcionario;
+
+        enviarPost("/empresa/" + empresa + "/vendas", "{ \"identificacao\": \"PAR-1\", " + pessoas
+                + ", \"itens\": [ { \"mercadoriaId\": " + primeira + ", \"quantidade\": 5 }, "
+                + "{ \"mercadoriaId\": " + segunda + ", \"quantidade\": 11 } ] }")
+                .andExpect(status().isConflict());
+
+        assertEquals(10, estoque(primeira));
+        assertEquals(10, estoque(segunda));
+        requisicao.perform(get("/empresa/" + empresa + "/vendas"))
+                .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    @Test
+    @DisplayName("estoque: a venda com identificacao repetida nao desconta nada")
+    void identificacaoRepetidaNaoBaixaEstoque() throws Exception {
+        long empresa = empresa();
+        long cliente = usuario("CLIENTE");
+        long funcionario = funcionarioDa(empresa);
+        long mercadoria = criar("/empresa/" + empresa + "/mercadorias", MERCADORIA);
+        String corpo = "{ \"identificacao\": \"REP-1\", \"clienteId\": " + cliente
+                + ", \"funcionarioId\": " + funcionario + ", " + itens(mercadoria, 2) + " }";
+
+        criar("/empresa/" + empresa + "/vendas", corpo);
+        enviarPost("/empresa/" + empresa + "/vendas", corpo).andExpect(status().isConflict());
+
+        assertEquals(8, estoque(mercadoria));
+    }
+
+    @Test
+    @DisplayName("dados de demonstracao: as duas vendas levaram 4 rodas cada, e o estoque mostra isso")
+    void estoqueDaCargaInicial() throws Exception {
+        String empresas = requisicao.perform(get("/empresa/empresas"))
+                .andReturn().getResponse().getContentAsString();
+        int empresa = JsonPath.read(empresas, "$[0].id");
+        String mercadorias = requisicao.perform(get("/empresa/" + empresa + "/mercadorias"))
+                .andReturn().getResponse().getContentAsString();
+        assertEquals(22, ((Number) JsonPath.read(mercadorias, "$[0].quantidade")).intValue());
+        requisicao.perform(get("/empresa/" + empresa + "/vendas"))
+                .andExpect(jsonPath("$[0].itens[0].quantidade").value(4))
+                .andExpect(jsonPath("$[1].itens[0].quantidade").value(4));
+    }
+
+    @Test
+    @DisplayName("preco: a venda guarda o valor da epoca, mesmo que a mercadoria mude de preco depois")
+    void precoDaEpoca() throws Exception {
+        long empresa = empresa();
+        long cliente = usuario("CLIENTE");
+        long funcionario = funcionarioDa(empresa);
+        long mercadoria = criar("/empresa/" + empresa + "/mercadorias", MERCADORIA);
+        long outra = criar("/empresa/" + empresa + "/mercadorias", MERCADORIA);
+        long id = criar("/empresa/" + empresa + "/vendas", "{ \"identificacao\": \"PRECO-1\", \"clienteId\": "
+                + cliente + ", \"funcionarioId\": " + funcionario + ", " + itens(mercadoria, 2) + " }");
+
+        enviarPut("/mercadoria/" + mercadoria, "{ \"valor\": 999.00 }").andExpect(status().isOk());
+        enviarPut("/mercadoria/" + outra, "{ \"valor\": 500.00 }").andExpect(status().isOk());
+
+        requisicao.perform(get("/venda/" + id))
+                .andExpect(jsonPath("$.itens[0].valorUnitario").value(300.0));
+
+        enviarPut("/venda/" + id, "{ \"itens\": [ { \"mercadoriaId\": " + mercadoria + ", \"quantidade\": 3 }, "
+                + "{ \"mercadoriaId\": " + outra + ", \"quantidade\": 1 } ] }")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.itens[0].valorUnitario").value(300.0))
+                .andExpect(jsonPath("$.itens[1].valorUnitario").value(500.0));
+    }
+
+    @Test
+    @DisplayName("regra do cliente: quem esta vinculado a outra empresa nao compra, os demais sim")
+    void clienteDeOutraEmpresa() throws Exception {
+        long empresa = empresa();
+        long outra = empresa();
+        long funcionario = funcionarioDa(empresa);
+        long servico = criar("/empresa/" + empresa + "/servicos", SERVICO);
+        long semEmpresa = usuario("CLIENTE");
+        long daEmpresa = usuario("CLIENTE");
+        long deOutra = usuario("CLIENTE");
+        requisicao.perform(put("/empresa/" + empresa + "/usuarios/" + daEmpresa)).andExpect(status().isNoContent());
+        requisicao.perform(put("/empresa/" + outra + "/usuarios/" + deOutra)).andExpect(status().isNoContent());
+        String url = "/empresa/" + empresa + "/vendas";
+        String resto = ", \"funcionarioId\": " + funcionario + ", \"servicoIds\": [ " + servico + " ] }";
+
+        enviarPost(url, "{ \"identificacao\": \"CLI-1\", \"clienteId\": " + deOutra + resto)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("O cliente de id " + deOutra
+                        + " esta vinculado a empresa de id " + outra));
+        criar(url, "{ \"identificacao\": \"CLI-2\", \"clienteId\": " + semEmpresa + resto);
+        long id = criar(url, "{ \"identificacao\": \"CLI-3\", \"clienteId\": " + daEmpresa + resto);
+        enviarPut("/venda/" + id, "{ \"clienteId\": " + deOutra + " }")
+                .andExpect(status().isBadRequest());
+        requisicao.perform(get("/venda/" + id))
+                .andExpect(jsonPath("$.clienteId").value(daEmpresa));
+    }
+
+    @Test
+    @DisplayName("PUT de usuario: endereco inexistente e filho alheio respondem 404, sem alterar nada")
+    void atualizacaoDeUsuarioIgnoradaVira404() throws Exception {
+        String corpo = """
+                { "nome": "Dona", "perfis": [ "CLIENTE" ], "emails": [ { "endereco": "dona@email.com" } ] }
+                """;
+        String resposta = enviarPost("/usuario/cadastro", corpo)
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        long dona = ((Number) JsonPath.read(resposta, "$.id")).longValue();
+        long email = ((Number) JsonPath.read(resposta, "$.emails[0].id")).longValue();
+        long outra = usuario("CLIENTE");
+
+        enviarPut("/usuario/atualizar", "{ \"id\": " + outra + ", \"nome\": \"Trocado\", \"endereco\": { \"cidade\": \"Santos\" } }")
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.mensagem").value("O usuario de id " + outra
+                        + " nao possui endereco. Para cadastrar, use POST /usuario/" + outra + "/endereco"));
+        enviarPut("/usuario/atualizar", "{ \"id\": " + outra + ", \"nome\": \"Trocado\", \"emails\": [ { \"id\": "
+                + email + ", \"endereco\": \"invasor@email.com\" } ] }")
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.mensagem").value("O e-mail de id " + email
+                        + " nao pertence ao usuario de id " + outra));
+        requisicao.perform(get("/usuario/" + outra))
+                .andExpect(jsonPath("$.nome").value("Pessoa"));
+        requisicao.perform(get("/email/" + email))
+                .andExpect(jsonPath("$.endereco").value("dona@email.com"));
+
+        enviarPut("/usuario/atualizar", "{ \"id\": " + dona + ", \"emails\": [ { \"id\": "
+                + email + ", \"endereco\": \"nova@email.com\" } ] }")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.emails[0].endereco").value("nova@email.com"));
+    }
+
+    @Test
+    @DisplayName("PUT de empresa: endereco inexistente e telefone alheio respondem 404")
+    void atualizacaoDeEmpresaIgnoradaVira404() throws Exception {
+        long empresa = empresa();
+        String resposta = enviarPost("/empresa/cadastro",
+                "{ \"razaoSocial\": \"Dona\", \"telefones\": [ { \"ddd\": \"11\", \"numero\": \"12345678\" } ] }")
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        long telefone = ((Number) JsonPath.read(resposta, "$.telefones[0].id")).longValue();
+
+        enviarPut("/empresa/atualizar", "{ \"id\": " + empresa + ", \"endereco\": { \"cidade\": \"Santos\" } }")
+                .andExpect(status().isNotFound());
+        enviarPut("/empresa/atualizar", "{ \"id\": " + empresa + ", \"telefones\": [ { \"id\": " + telefone
+                + ", \"ddd\": \"99\" } ] }")
+                .andExpect(status().isNotFound());
+        requisicao.perform(get("/telefone/" + telefone))
+                .andExpect(jsonPath("$.ddd").value("11"));
+    }
+
+    @Test
+    @DisplayName("preco: o servico da venda guarda o valor da epoca, e o total soma tudo")
+    void precoDoServicoETotal() throws Exception {
+        long empresa = empresa();
+        long cliente = usuario("CLIENTE");
+        long funcionario = funcionarioDa(empresa);
+        long mercadoria = criar("/empresa/" + empresa + "/mercadorias", MERCADORIA);
+        long servico = criar("/empresa/" + empresa + "/servicos", SERVICO);
+        long outro = criar("/empresa/" + empresa + "/servicos", SERVICO);
+        long id = criar("/empresa/" + empresa + "/vendas", "{ \"identificacao\": \"TOTAL-1\", \"clienteId\": " + cliente
+                + ", \"funcionarioId\": " + funcionario + ", " + itens(mercadoria, 2) + ", \"servicoIds\": [ " + servico + " ] }");
+
+        requisicao.perform(get("/venda/" + id))
+                .andExpect(jsonPath("$.valorTotal").value(650.0));
+        enviarPut("/servico/" + servico, "{ \"valor\": 999.00 }").andExpect(status().isOk());
+        enviarPut("/servico/" + outro, "{ \"valor\": 10.00 }").andExpect(status().isOk());
+
+        requisicao.perform(get("/venda/" + id))
+                .andExpect(jsonPath("$.servicos[0].valor").value(50.0))
+                .andExpect(jsonPath("$.valorTotal").value(650.0));
+        enviarPut("/venda/" + id, "{ \"servicoIds\": [ " + servico + ", " + outro + " ] }")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.servicos.length()").value(2))
+                .andExpect(jsonPath("$.servicos[0].valor").value(50.0))
+                .andExpect(jsonPath("$.servicos[1].valor").value(10.0))
+                .andExpect(jsonPath("$.valorTotal").value(660.0));
+        requisicao.perform(get("/venda/" + id))
+                .andExpect(jsonPath("$.servicos.length()").value(2));
+    }
+
+    @Test
+    @DisplayName("veiculo da venda: removerVeiculo tira o veiculo e libera a exclusao dele")
+    void removerVeiculoDaVenda() throws Exception {
+        long empresa = empresa();
+        long cliente = usuario("CLIENTE");
+        long funcionario = funcionarioDa(empresa);
+        long carro = veiculo(cliente, "EEE1E11");
+        long servico = criar("/empresa/" + empresa + "/servicos", SERVICO);
+        long id = criar("/empresa/" + empresa + "/vendas", "{ \"identificacao\": \"VEI-1\", \"clienteId\": " + cliente
+                + ", \"funcionarioId\": " + funcionario + ", \"veiculoId\": " + carro + ", \"servicoIds\": [ " + servico + " ] }");
+
+        requisicao.perform(delete("/veiculo/" + carro)).andExpect(status().isConflict());
+        enviarPut("/venda/" + id, "{ \"veiculoId\": " + carro + ", \"removerVeiculo\": true }")
+                .andExpect(status().isBadRequest());
+        enviarPut("/venda/" + id, "{ \"removerVeiculo\": true }")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.veiculoId").doesNotExist())
+                .andExpect(jsonPath("$._links.veiculo").doesNotExist());
+        requisicao.perform(delete("/veiculo/" + carro)).andExpect(status().isNoContent());
+    }
+
+    @Test
+    @DisplayName("perfil em uso: nao sai de quem depende dele, e sai quando a dependencia acaba")
+    void perfilEmUso() throws Exception {
+        long empresa = empresa();
+        long cliente = usuario("CLIENTE");
+        long funcionario = funcionarioDa(empresa);
+        long fornecedor = usuario("FORNECEDOR");
+        long mercadoria = criar("/empresa/" + empresa + "/mercadorias", MERCADORIA);
+        long id = criar("/empresa/" + empresa + "/vendas", "{ \"identificacao\": \"PERFIL-1\", \"clienteId\": " + cliente
+                + ", \"funcionarioId\": " + funcionario + ", " + itens(mercadoria, 1) + " }");
+        requisicao.perform(put("/usuario/" + fornecedor + "/mercadorias/" + mercadoria)).andExpect(status().isNoContent());
+
+        enviarPut("/usuario/atualizar", "{ \"id\": " + cliente + ", \"perfis\": [ \"FORNECEDOR\" ] }")
+                .andExpect(status().isConflict());
+        enviarPut("/usuario/atualizar", "{ \"id\": " + funcionario + ", \"perfis\": [ \"CLIENTE\" ] }")
+                .andExpect(status().isConflict());
+        enviarPut("/usuario/atualizar", "{ \"id\": " + fornecedor + ", \"perfis\": [ \"CLIENTE\" ] }")
+                .andExpect(status().isConflict());
+        requisicao.perform(get("/usuario/" + cliente)).andExpect(jsonPath("$.perfis[0]").value("CLIENTE"));
+
+        enviarPut("/usuario/atualizar", "{ \"id\": " + cliente + ", \"perfis\": [ \"CLIENTE\", \"FORNECEDOR\" ] }")
+                .andExpect(status().isOk());
+
+        requisicao.perform(delete("/venda/" + id)).andExpect(status().isNoContent());
+        enviarPut("/usuario/atualizar", "{ \"id\": " + cliente + ", \"perfis\": [ \"FORNECEDOR\" ] }")
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("dados de demonstracao: o total das vendas soma as rodas e os servicos")
+    void totalDaCargaInicial() throws Exception {
+        String empresas = requisicao.perform(get("/empresa/empresas"))
+                .andReturn().getResponse().getContentAsString();
+        int empresa = JsonPath.read(empresas, "$[0].id");
+
+        requisicao.perform(get("/empresa/" + empresa + "/vendas"))
+                .andExpect(jsonPath("$[0].valorTotal").value(1300.0))
+                .andExpect(jsonPath("$[1].valorTotal").value(1280.0));
     }
 }

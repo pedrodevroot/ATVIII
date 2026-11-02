@@ -2,6 +2,7 @@ package com.autobots.automanager.dtos;
 
 import java.util.List;
 
+import javax.validation.Valid;
 import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Size;
 
@@ -21,8 +22,10 @@ public class VendaAtualizacaoDto {
 
     private Long veiculoId;
 
-    @UniqueElements(message = "A mesma mercadoria nao pode ser informada mais de uma vez")
-    private List<@NotNull(message = "O id da mercadoria nao pode ser nulo") Long> mercadoriaIds;
+    private Boolean removerVeiculo;
+
+    @Valid
+    private List<@NotNull(message = "A lista de itens nao pode conter valor nulo") ItemVendaCadastroDto> itens;
 
     @UniqueElements(message = "O mesmo servico nao pode ser informado mais de uma vez")
     private List<@NotNull(message = "O id do servico nao pode ser nulo") Long> servicoIds;

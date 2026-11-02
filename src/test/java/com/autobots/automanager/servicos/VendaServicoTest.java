@@ -7,11 +7,14 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -19,19 +22,24 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.autobots.automanager.dtos.ItemVendaCadastroDto;
 import com.autobots.automanager.dtos.VendaAtualizacaoDto;
 import com.autobots.automanager.dtos.VendaCadastroDto;
 import com.autobots.automanager.entidades.Empresa;
+import com.autobots.automanager.entidades.ItemServico;
+import com.autobots.automanager.entidades.ItemVenda;
 import com.autobots.automanager.entidades.Mercadoria;
 import com.autobots.automanager.entidades.Servico;
 import com.autobots.automanager.entidades.Usuario;
 import com.autobots.automanager.entidades.Veiculo;
 import com.autobots.automanager.entidades.Venda;
 import com.autobots.automanager.enumeracoes.PerfilUsuario;
+import com.autobots.automanager.excecoes.ConflitoException;
 import com.autobots.automanager.excecoes.RecursoNaoEncontradoException;
 import com.autobots.automanager.repositorios.EmpresaRepositorio;
 import com.autobots.automanager.repositorios.MercadoriaRepositorio;
@@ -116,13 +124,20 @@ class VendaServicoTest {
         return novo;
     }
 
+    private ItemVendaCadastroDto itemDto(long mercadoriaId, long quantidade) {
+        ItemVendaCadastroDto dto = new ItemVendaCadastroDto();
+        dto.setMercadoriaId(mercadoriaId);
+        dto.setQuantidade(quantidade);
+        return dto;
+    }
+
     private VendaCadastroDto cadastro() {
         VendaCadastroDto dto = new VendaCadastroDto();
         dto.setIdentificacao("V-1");
         dto.setClienteId(CLIENTE);
         dto.setFuncionarioId(FUNCIONARIO);
         dto.setVeiculoId(VEICULO);
-        dto.setMercadoriaIds(List.of(MERCADORIA));
+        dto.setItens(List.of(itemDto(MERCADORIA, 4L)));
         dto.setServicoIds(List.of(SERVICO));
         return dto;
     }
@@ -134,8 +149,17 @@ class VendaServicoTest {
         venda.setCliente(cliente);
         venda.setFuncionario(usuarioRepositorio.findById(FUNCIONARIO).orElseThrow());
         venda.setVeiculo(veiculo);
-        venda.getMercadorias().add(mercadoria);
-        venda.getServicos().add(itemServico);
+        ItemVenda item = new ItemVenda();
+        item.setVenda(venda);
+        item.setMercadoria(mercadoria);
+        item.setQuantidade(2);
+        item.setValorUnitario(new BigDecimal("100.00"));
+        venda.getItens().add(item);
+        ItemServico contratado = new ItemServico();
+        contratado.setVenda(venda);
+        contratado.setServico(itemServico);
+        contratado.setValorUnitario(new BigDecimal("40.00"));
+        venda.getItensServico().add(contratado);
         lenient().when(repositorio.findById(VENDA)).thenReturn(Optional.of(venda));
         lenient().when(empresaRepositorio.findByVendasId(VENDA)).thenReturn(Optional.of(empresa));
         lenient().when(repositorio.save(venda)).thenReturn(venda);
@@ -151,6 +175,7 @@ class VendaServicoTest {
 
     @BeforeEach
     void prepararCenario() {
+        lenient().when(mercadoriaRepositorio.baixarEstoque(anyLong(), anyLong())).thenReturn(1);
         empresa = novaEmpresa(EMPRESA);
         Empresa outraEmpresa = novaEmpresa(2L);
         lenient().when(empresaRepositorio.findById(EMPRESA)).thenReturn(Optional.of(empresa));
@@ -165,10 +190,12 @@ class VendaServicoTest {
         novoVeiculo(VEICULO_DE_OUTRO, outroCliente);
 
         mercadoria = novaMercadoria(MERCADORIA);
+        mercadoria.setValor(new BigDecimal("300.00"));
         novaMercadoria(MERCADORIA_DE_OUTRA);
         empresa.getMercadorias().add(mercadoria);
 
         itemServico = novoServico(SERVICO);
+        itemServico.setValor(new BigDecimal("50.00"));
         novoServico(SERVICO_DE_OUTRA);
         empresa.getServicos().add(itemServico);
     }
@@ -235,7 +262,10 @@ class VendaServicoTest {
         assertSame(cliente, criada.getCliente());
         assertEquals(FUNCIONARIO, criada.getFuncionario().getId());
         assertSame(veiculo, criada.getVeiculo());
-        assertSame(mercadoria, criada.getMercadorias().get(0));
+        assertSame(mercadoria, criada.getItens().get(0).getMercadoria());
+        assertSame(criada, criada.getItens().get(0).getVenda());
+        assertEquals(4L, criada.getItens().get(0).getQuantidade());
+        verify(mercadoriaRepositorio).baixarEstoque(MERCADORIA, 4L);
         assertSame(itemServico, criada.getServicos().get(0));
         assertSame(criada, empresa.getVendas().get(0));
         verify(empresaRepositorio).save(empresa);
@@ -247,12 +277,12 @@ class VendaServicoTest {
         when(repositorio.save(any(Venda.class))).thenAnswer(chamada -> chamada.getArgument(0));
         VendaCadastroDto dto = cadastro();
         dto.setVeiculoId(null);
-        dto.setMercadoriaIds(List.of());
+        dto.setItens(List.of());
 
         Venda criada = servico.criar(EMPRESA, dto);
 
         assertNull(criada.getVeiculo());
-        assertTrue(criada.getMercadorias().isEmpty());
+        assertTrue(criada.getItens().isEmpty());
         assertEquals(1, criada.getServicos().size());
     }
 
@@ -305,7 +335,7 @@ class VendaServicoTest {
     @DisplayName("criar: recusa mercadoria de outra empresa")
     void criarMercadoriaDeOutra() {
         VendaCadastroDto dto = cadastro();
-        dto.setMercadoriaIds(List.of(MERCADORIA_DE_OUTRA));
+        dto.setItens(List.of(itemDto(MERCADORIA_DE_OUTRA, 1L)));
 
         criarRecusado(dto, "A mercadoria de id 11 nao pertence a empresa de id 1");
     }
@@ -323,7 +353,7 @@ class VendaServicoTest {
     @DisplayName("criar: recusa venda sem nenhum item")
     void criarSemItens() {
         VendaCadastroDto dto = cadastro();
-        dto.setMercadoriaIds(List.of());
+        dto.setItens(List.of());
         dto.setServicoIds(List.of());
 
         criarRecusado(dto, "A venda deve ter ao menos uma mercadoria ou um servico");
@@ -346,7 +376,7 @@ class VendaServicoTest {
         assertThrows(RecursoNaoEncontradoException.class, () -> servico.criar(EMPRESA, semVeiculo));
 
         VendaCadastroDto semMercadoria = cadastro();
-        semMercadoria.setMercadoriaIds(List.of(999L));
+        semMercadoria.setItens(List.of(itemDto(999L, 1L)));
         when(mercadoriaRepositorio.findById(999L)).thenReturn(Optional.empty());
         assertThrows(RecursoNaoEncontradoException.class, () -> servico.criar(EMPRESA, semMercadoria));
 
@@ -381,7 +411,7 @@ class VendaServicoTest {
         assertEquals("V-2", atualizada.getIdentificacao());
         assertSame(cliente, venda.getCliente());
         assertSame(veiculo, venda.getVeiculo());
-        assertEquals(1, venda.getMercadorias().size());
+        assertEquals(1, venda.getItens().size());
         assertEquals(1, venda.getServicos().size());
     }
 
@@ -402,11 +432,11 @@ class VendaServicoTest {
     void atualizarRemoveMercadorias() {
         Venda venda = vendaExistente();
         VendaAtualizacaoDto dto = new VendaAtualizacaoDto();
-        dto.setMercadoriaIds(List.of());
+        dto.setItens(List.of());
 
         servico.atualizar(VENDA, dto);
 
-        assertTrue(venda.getMercadorias().isEmpty());
+        assertTrue(venda.getItens().isEmpty());
         assertEquals(1, venda.getServicos().size());
     }
 
@@ -415,7 +445,7 @@ class VendaServicoTest {
     void atualizarSemItens() {
         vendaExistente();
         VendaAtualizacaoDto dto = new VendaAtualizacaoDto();
-        dto.setMercadoriaIds(List.of());
+        dto.setItens(List.of());
         dto.setServicoIds(List.of());
 
         assertThrows(IllegalArgumentException.class, () -> servico.atualizar(VENDA, dto));
@@ -460,7 +490,7 @@ class VendaServicoTest {
         assertThrows(IllegalArgumentException.class, () -> servico.atualizar(VENDA, funcionario));
 
         VendaAtualizacaoDto mercadorias = new VendaAtualizacaoDto();
-        mercadorias.setMercadoriaIds(List.of(MERCADORIA_DE_OUTRA));
+        mercadorias.setItens(List.of(itemDto(MERCADORIA_DE_OUTRA, 1L)));
         assertThrows(IllegalArgumentException.class, () -> servico.atualizar(VENDA, mercadorias));
 
         VendaAtualizacaoDto servicos = new VendaAtualizacaoDto();
@@ -489,6 +519,7 @@ class VendaServicoTest {
 
         servico.excluir(VENDA);
 
+        verify(mercadoriaRepositorio).devolverEstoque(MERCADORIA, 2L);
         verify(repositorio).delete(venda);
     }
 
@@ -500,5 +531,257 @@ class VendaServicoTest {
         assertThrows(RecursoNaoEncontradoException.class, () -> servico.excluir(999L));
 
         verify(repositorio, never()).delete(any(Venda.class));
+    }
+
+    @Test
+    @DisplayName("criar: lanca Conflito quando o estoque nao atende a quantidade, sem salvar a venda")
+    void criarEstoqueInsuficiente() {
+        when(mercadoriaRepositorio.baixarEstoque(MERCADORIA, 4L)).thenReturn(0);
+
+        ConflitoException excecao = assertThrows(
+                ConflitoException.class, () -> servico.criar(EMPRESA, cadastro()));
+
+        assertEquals("Estoque insuficiente para a mercadoria de id 10. Quantidade solicitada: 4",
+                excecao.getMessage());
+        verify(repositorio, never()).save(any(Venda.class));
+    }
+
+    @Test
+    @DisplayName("criar: recusa a mesma mercadoria informada duas vezes, sem baixar o estoque da repetida")
+    void criarMercadoriaRepetida() {
+        VendaCadastroDto dto = cadastro();
+        dto.setItens(List.of(itemDto(MERCADORIA, 1L), itemDto(MERCADORIA, 2L)));
+
+        criarRecusado(dto, "A mercadoria de id 10 foi informada mais de uma vez");
+
+        verify(mercadoriaRepositorio, never()).baixarEstoque(MERCADORIA, 2L);
+    }
+
+    @Test
+    @DisplayName("criar: nao baixa o estoque de mercadoria de outra empresa")
+    void criarNaoBaixaEstoqueDeOutraEmpresa() {
+        VendaCadastroDto dto = cadastro();
+        dto.setItens(List.of(itemDto(MERCADORIA_DE_OUTRA, 1L)));
+
+        assertThrows(IllegalArgumentException.class, () -> servico.criar(EMPRESA, dto));
+
+        verify(mercadoriaRepositorio, never()).baixarEstoque(MERCADORIA_DE_OUTRA, 1L);
+    }
+
+    @Test
+    @DisplayName("atualizar: devolve o estoque dos itens antigos antes de baixar o dos novos")
+    void atualizarTrocaItens() {
+        Venda venda = vendaExistente();
+        VendaAtualizacaoDto dto = new VendaAtualizacaoDto();
+        dto.setItens(List.of(itemDto(MERCADORIA, 5L)));
+
+        servico.atualizar(VENDA, dto);
+
+        InOrder ordem = inOrder(mercadoriaRepositorio);
+        ordem.verify(mercadoriaRepositorio).devolverEstoque(MERCADORIA, 2L);
+        ordem.verify(mercadoriaRepositorio).baixarEstoque(MERCADORIA, 5L);
+        assertEquals(1, venda.getItens().size());
+        assertEquals(5L, venda.getItens().get(0).getQuantidade());
+    }
+
+    @Test
+    @DisplayName("atualizar: sem a lista de itens, o estoque nao e tocado")
+    void atualizarSemItensNaoMexeNoEstoque() {
+        Venda venda = vendaExistente();
+        VendaAtualizacaoDto dto = new VendaAtualizacaoDto();
+        dto.setIdentificacao("V-2");
+
+        servico.atualizar(VENDA, dto);
+
+        verify(mercadoriaRepositorio, never()).devolverEstoque(anyLong(), anyLong());
+        verify(mercadoriaRepositorio, never()).baixarEstoque(anyLong(), anyLong());
+        assertEquals(2L, venda.getItens().get(0).getQuantidade());
+    }
+
+    @Test
+    @DisplayName("atualizar: lanca Conflito quando o estoque nao atende os itens novos")
+    void atualizarEstoqueInsuficiente() {
+        vendaExistente();
+        when(mercadoriaRepositorio.baixarEstoque(MERCADORIA, 50L)).thenReturn(0);
+        VendaAtualizacaoDto dto = new VendaAtualizacaoDto();
+        dto.setItens(List.of(itemDto(MERCADORIA, 50L)));
+
+        assertThrows(ConflitoException.class, () -> servico.atualizar(VENDA, dto));
+
+        verify(repositorio, never()).save(any(Venda.class));
+    }
+
+    @Test
+    @DisplayName("excluir: venda sem mercadorias nao mexe no estoque")
+    void excluirSemMercadorias() {
+        Venda venda = vendaExistente();
+        venda.getItens().clear();
+
+        servico.excluir(VENDA);
+
+        verify(mercadoriaRepositorio, never()).devolverEstoque(anyLong(), anyLong());
+        verify(repositorio).delete(venda);
+    }
+
+    @Test
+    @DisplayName("criar: baixa o estoque sempre na ordem do id da mercadoria, para evitar deadlock")
+    void criarBaixaEstoqueEmOrdem() {
+        Mercadoria segunda = novaMercadoria(12L);
+        empresa.getMercadorias().add(segunda);
+        when(repositorio.save(any(Venda.class))).thenAnswer(chamada -> chamada.getArgument(0));
+        VendaCadastroDto dto = cadastro();
+        dto.setItens(List.of(itemDto(12L, 1L), itemDto(MERCADORIA, 2L)));
+
+        servico.criar(EMPRESA, dto);
+
+        InOrder ordem = inOrder(mercadoriaRepositorio);
+        ordem.verify(mercadoriaRepositorio).baixarEstoque(MERCADORIA, 2L);
+        ordem.verify(mercadoriaRepositorio).baixarEstoque(12L, 1L);
+    }
+
+    @Test
+    @DisplayName("excluir: devolve o estoque sempre na ordem do id da mercadoria, para evitar deadlock")
+    void excluirDevolveEstoqueEmOrdem() {
+        Venda venda = vendaExistente();
+        Mercadoria menor = novaMercadoria(5L);
+        ItemVenda item = new ItemVenda();
+        item.setVenda(venda);
+        item.setMercadoria(menor);
+        item.setQuantidade(3);
+        venda.getItens().add(item);
+
+        servico.excluir(VENDA);
+
+        InOrder ordem = inOrder(mercadoriaRepositorio);
+        ordem.verify(mercadoriaRepositorio).devolverEstoque(5L, 3L);
+        ordem.verify(mercadoriaRepositorio).devolverEstoque(MERCADORIA, 2L);
+    }
+
+    @Test
+    @DisplayName("criar: recusa cliente vinculado a outra empresa")
+    void criarClienteDeOutraEmpresa() {
+        usuario(60L, PerfilUsuario.CLIENTE, novaEmpresa(2L));
+        VendaCadastroDto dto = cadastro();
+        dto.setClienteId(60L);
+        dto.setVeiculoId(null);
+
+        criarRecusado(dto, "O cliente de id 60 esta vinculado a empresa de id 2");
+    }
+
+    @Test
+    @DisplayName("criar: aceita cliente vinculado a mesma empresa, e tambem o sem empresa")
+    void criarClienteDaMesmaEmpresa() {
+        when(repositorio.save(any(Venda.class))).thenAnswer(chamada -> chamada.getArgument(0));
+        Usuario daEmpresa = usuario(61L, PerfilUsuario.CLIENTE, empresa);
+        VendaCadastroDto dto = cadastro();
+        dto.setClienteId(61L);
+        dto.setVeiculoId(null);
+
+        assertSame(daEmpresa, servico.criar(EMPRESA, dto).getCliente());
+        assertSame(cliente, servico.criar(EMPRESA, cadastro()).getCliente());
+    }
+
+    @Test
+    @DisplayName("atualizar: recusa trocar para cliente vinculado a outra empresa")
+    void atualizarClienteDeOutraEmpresa() {
+        vendaExistente();
+        usuario(60L, PerfilUsuario.CLIENTE, novaEmpresa(2L));
+        VendaAtualizacaoDto dto = new VendaAtualizacaoDto();
+        dto.setClienteId(60L);
+
+        assertThrows(IllegalArgumentException.class, () -> servico.atualizar(VENDA, dto));
+
+        verify(repositorio, never()).save(any(Venda.class));
+    }
+
+    @Test
+    @DisplayName("criar: o item guarda o valor atual da mercadoria")
+    void criarGuardaValorDaMercadoria() {
+        when(repositorio.save(any(Venda.class))).thenAnswer(chamada -> chamada.getArgument(0));
+
+        Venda criada = servico.criar(EMPRESA, cadastro());
+
+        assertEquals(new BigDecimal("300.00"), criada.getItens().get(0).getValorUnitario());
+    }
+
+    @Test
+    @DisplayName("atualizar: mercadoria que continua na venda mantem o valor original, e a nova usa o atual")
+    void atualizarPreservaValorOriginal() {
+        Venda venda = vendaExistente();
+        Mercadoria nova = novaMercadoria(12L);
+        nova.setValor(new BigDecimal("50.00"));
+        empresa.getMercadorias().add(nova);
+        VendaAtualizacaoDto dto = new VendaAtualizacaoDto();
+        dto.setItens(List.of(itemDto(MERCADORIA, 5L), itemDto(12L, 1L)));
+
+        servico.atualizar(VENDA, dto);
+
+        assertEquals(new BigDecimal("100.00"), venda.getItens().get(0).getValorUnitario());
+        assertEquals(new BigDecimal("50.00"), venda.getItens().get(1).getValorUnitario());
+    }
+
+    @Test
+    @DisplayName("criar: o servico da venda guarda o valor atual")
+    void criarGuardaValorDoServico() {
+        when(repositorio.save(any(Venda.class))).thenAnswer(chamada -> chamada.getArgument(0));
+
+        Venda criada = servico.criar(EMPRESA, cadastro());
+
+        assertEquals(new BigDecimal("50.00"), criada.getItensServico().get(0).getValorUnitario());
+        assertSame(criada, criada.getItensServico().get(0).getVenda());
+    }
+
+    @Test
+    @DisplayName("atualizar: servico que continua na venda mantem o valor original, e o novo usa o atual")
+    void atualizarPreservaValorDoServico() {
+        Venda venda = vendaExistente();
+        Servico novo = novoServico(22L);
+        novo.setValor(new BigDecimal("70.00"));
+        empresa.getServicos().add(novo);
+        VendaAtualizacaoDto dto = new VendaAtualizacaoDto();
+        dto.setServicoIds(List.of(SERVICO, 22L));
+
+        servico.atualizar(VENDA, dto);
+
+        assertEquals(new BigDecimal("40.00"), venda.getItensServico().get(0).getValorUnitario());
+        assertEquals(new BigDecimal("70.00"), venda.getItensServico().get(1).getValorUnitario());
+    }
+
+    @Test
+    @DisplayName("atualizar: removerVeiculo tira o veiculo da venda")
+    void atualizarRemoveVeiculo() {
+        Venda venda = vendaExistente();
+        VendaAtualizacaoDto dto = new VendaAtualizacaoDto();
+        dto.setRemoverVeiculo(true);
+
+        servico.atualizar(VENDA, dto);
+
+        assertNull(venda.getVeiculo());
+    }
+
+    @Test
+    @DisplayName("atualizar: sem removerVeiculo, o veiculo fica; e removerVeiculo false nao remove")
+    void atualizarMantemVeiculo() {
+        Venda venda = vendaExistente();
+        VendaAtualizacaoDto dto = new VendaAtualizacaoDto();
+        dto.setRemoverVeiculo(false);
+
+        servico.atualizar(VENDA, dto);
+
+        assertSame(veiculo, venda.getVeiculo());
+    }
+
+    @Test
+    @DisplayName("atualizar: recusa veiculoId e removerVeiculo juntos")
+    void atualizarVeiculoEmDobro() {
+        vendaExistente();
+        VendaAtualizacaoDto dto = new VendaAtualizacaoDto();
+        dto.setVeiculoId(VEICULO);
+        dto.setRemoverVeiculo(true);
+
+        IllegalArgumentException excecao = assertThrows(
+                IllegalArgumentException.class, () -> servico.atualizar(VENDA, dto));
+
+        assertEquals("Informe veiculoId ou removerVeiculo, nao os dois", excecao.getMessage());
     }
 }

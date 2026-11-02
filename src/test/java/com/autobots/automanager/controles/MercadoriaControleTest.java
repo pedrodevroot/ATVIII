@@ -222,4 +222,32 @@ class MercadoriaControleTest {
 
         verify(servico).desvincularFornecedor(2L, 10L);
     }
+
+    @Test
+    @DisplayName("POST e PUT de mercadoria: 400 quando a quantidade passa do limite de estoque")
+    void quantidadeAcimaDoLimite() throws Exception {
+        requisicao.perform(post("/empresa/1/mercadorias")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{ \"nome\": \"Pneu\", \"fabricacao\": \"2025-01-15T00:00:00.000+00:00\", "
+                        + "\"quantidade\": 1000000000, \"valor\": 1 }"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.erros[0].mensagem").value("A quantidade nao pode passar de 999999999"));
+        requisicao.perform(put("/mercadoria/10")
+                .contentType(MediaType.APPLICATION_JSON).content("{ \"quantidade\": 1000000000 }"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(servico);
+    }
+
+    @Test
+    @DisplayName("POST de mercadoria: aceita a quantidade no limite de estoque")
+    void quantidadeNoLimite() throws Exception {
+        when(servico.criar(anyLong(), any(Mercadoria.class))).thenReturn(mercadoria(10L));
+
+        requisicao.perform(post("/empresa/1/mercadorias")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{ \"nome\": \"Pneu\", \"fabricacao\": \"2025-01-15T00:00:00.000+00:00\", "
+                        + "\"quantidade\": 999999999, \"valor\": 1 }"))
+                .andExpect(status().isCreated());
+    }
 }

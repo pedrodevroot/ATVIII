@@ -3,16 +3,17 @@ package com.autobots.automanager.entidades;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.stream.Collectors;
 
+import javax.persistence.CascadeType;
 import javax.persistence.Column;
 import javax.persistence.Entity;
 import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
 import javax.persistence.Id;
 import javax.persistence.JoinColumn;
-import javax.persistence.JoinTable;
-import javax.persistence.ManyToMany;
 import javax.persistence.ManyToOne;
+import javax.persistence.OneToMany;
 import javax.persistence.OrderBy;
 
 import lombok.Getter;
@@ -38,16 +39,18 @@ public class Venda {
 	@ManyToOne
 	@JoinColumn(name = "veiculo_id")
 	private Veiculo veiculo;
-	@ManyToMany
-	@JoinTable(name = "venda_mercadoria",
-			joinColumns = @JoinColumn(name = "venda_id"),
-			inverseJoinColumns = @JoinColumn(name = "mercadoria_id"))
+	@OneToMany(mappedBy = "venda", cascade = CascadeType.ALL, orphanRemoval = true)
 	@OrderBy("id")
-	private List<Mercadoria> mercadorias = new ArrayList<>();
-	@ManyToMany
-	@JoinTable(name = "venda_servico",
-			joinColumns = @JoinColumn(name = "venda_id"),
-			inverseJoinColumns = @JoinColumn(name = "servico_id"))
+	private List<ItemVenda> itens = new ArrayList<>();
+	@OneToMany(mappedBy = "venda", cascade = CascadeType.ALL, orphanRemoval = true)
 	@OrderBy("id")
-	private List<Servico> servicos = new ArrayList<>();
+	private List<ItemServico> itensServico = new ArrayList<>();
+
+	public List<Mercadoria> getMercadorias() {
+		return itens.stream().map(ItemVenda::getMercadoria).collect(Collectors.toList());
+	}
+
+	public List<Servico> getServicos() {
+		return itensServico.stream().map(ItemServico::getServico).collect(Collectors.toList());
+	}
 }

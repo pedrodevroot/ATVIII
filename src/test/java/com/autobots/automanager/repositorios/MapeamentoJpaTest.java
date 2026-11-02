@@ -25,6 +25,8 @@ import com.autobots.automanager.entidades.Documento;
 import com.autobots.automanager.entidades.Email;
 import com.autobots.automanager.entidades.Empresa;
 import com.autobots.automanager.entidades.Endereco;
+import com.autobots.automanager.entidades.ItemServico;
+import com.autobots.automanager.entidades.ItemVenda;
 import com.autobots.automanager.entidades.Mercadoria;
 import com.autobots.automanager.entidades.Servico;
 import com.autobots.automanager.entidades.Telefone;
@@ -44,6 +46,8 @@ class MapeamentoJpaTest {
     private EmpresaRepositorio empresaRepositorio;
     @Autowired
     private VendaRepositorio vendaRepositorio;
+    @Autowired
+    private MercadoriaRepositorio mercadoriaRepositorio;
     @Autowired
     private VeiculoRepositorio veiculoRepositorio;
     @Autowired
@@ -131,7 +135,7 @@ class MapeamentoJpaTest {
         assertEquals(16, nomes.size(), "esperado 16 tabelas, encontrado: " + nomes);
         for (String tabela : List.of("USUARIO", "USUARIO_PERFIS", "EMPRESA", "ENDERECO", "TELEFONE",
                 "DOCUMENTO", "EMAIL", "CREDENCIAL", "CREDENCIAL_USUARIO_SENHA", "CREDENCIAL_CODIGO_BARRA",
-                "MERCADORIA", "SERVICO", "VEICULO", "VENDA", "VENDA_MERCADORIA", "VENDA_SERVICO")) {
+                "MERCADORIA", "SERVICO", "VEICULO", "VENDA", "ITEM_VENDA", "ITEM_SERVICO")) {
             assertTrue(nomes.contains(tabela), "faltou a tabela " + tabela);
         }
     }
@@ -327,8 +331,8 @@ class MapeamentoJpaTest {
         gerenciador.clear();
 
         assertEquals(2, vendaRepositorio.count());
-        assertEquals(2, contar("venda_servico"));
-        assertEquals(2, contar("venda_mercadoria"));
+        assertEquals(2, contar("item_servico"));
+        assertEquals(2, contar("item_venda"));
         assertEquals(2, repositorio.findById(cliente.getId()).orElseThrow().getVendas().size());
         assertEquals(2, veiculoRepositorio.findById(carro.getId()).orElseThrow().getVendas().size());
         assertTrue(vendaRepositorio.existsByClienteIdOrFuncionarioId(funcionario.getId(), funcionario.getId()));
@@ -353,11 +357,13 @@ class MapeamentoJpaTest {
         for (Usuario usuario : lida.getUsuarios()) {
             usuario.setEmpresa(null);
         }
+        lida.getVendas().clear();
+        empresaRepositorio.saveAndFlush(lida);
         empresaRepositorio.delete(lida);
         empresaRepositorio.flush();
         gerenciador.clear();
 
-        for (String tabela : List.of("empresa", "venda", "venda_servico", "venda_mercadoria",
+        for (String tabela : List.of("empresa", "venda", "item_servico", "item_venda",
                 "mercadoria", "servico")) {
             assertEquals(0, contar(tabela), "tabela " + tabela + " nao ficou vazia");
         }
@@ -508,10 +514,148 @@ class MapeamentoJpaTest {
             venda.setCliente(cliente);
             venda.setFuncionario(funcionario);
             venda.setVeiculo(carro);
-            venda.getMercadorias().add(roda);
-            venda.getServicos().add(alinhamento);
+            ItemVenda item = new ItemVenda();
+            item.setVenda(venda);
+            item.setMercadoria(roda);
+            item.setQuantidade(2);
+            item.setValorUnitario(roda.getValor());
+            venda.getItens().add(item);
+            ItemServico itemServico = new ItemServico();
+            itemServico.setVenda(venda);
+            itemServico.setServico(alinhamento);
+            itemServico.setValorUnitario(alinhamento.getValor());
+            venda.getItensServico().add(itemServico);
             empresa.getVendas().add(venda);
         }
         return empresa;
+    }
+
+    @Test
+    @DisplayName("baixarEstoque: desconta a quantidade, ate zerar, e recusa quando nao ha o suficiente")
+    void baixarEstoque() {
+        Mercadoria roda = mercadoriaRepositorio.saveAndFlush(mercadoria());
+
+        assertEquals(1, mercadoriaRepositorio.baixarEstoque(roda.getId(), 4L));
+        assertEquals(1, mercadoriaRepositorio.baixarEstoque(roda.getId(), 6L));
+        assertEquals(0, mercadoriaRepositorio.baixarEstoque(roda.getId(), 1L));
+        gerenciador.clear();
+
+        assertEquals(0L, mercadoriaRepositorio.findById(roda.getId()).orElseThrow().getQuantidade());
+    }
+
+    @Test
+    @DisplayName("devolverEstoque: soma a quantidade de volta")
+    void devolverEstoque() {
+        Mercadoria roda = mercadoriaRepositorio.saveAndFlush(mercadoria());
+
+        assertEquals(1, mercadoriaRepositorio.devolverEstoque(roda.getId(), 5L));
+        gerenciador.clear();
+
+        assertEquals(15L, mercadoriaRepositorio.findById(roda.getId()).orElseThrow().getQuantidade());
+    }
+
+    @Test
+    @DisplayName("existsByItensMercadoriaId: encontra a mercadoria que aparece em alguma venda")
+    void mercadoriaEmVenda() {
+        Usuario cliente = usuarioSimples("Cliente", PerfilUsuario.CLIENTE);
+        Veiculo carro = veiculo(cliente, "ABC1D23");
+        Usuario funcionario = usuarioSimples("Funcionario", PerfilUsuario.FUNCIONARIO);
+        repositorio.save(cliente);
+        repositorio.save(funcionario);
+        Empresa empresa = empresaRepositorio.saveAndFlush(empresaCom(cliente, funcionario, carro, "V1"));
+        Mercadoria semVenda = mercadoriaRepositorio.saveAndFlush(mercadoria());
+
+        assertTrue(vendaRepositorio.existsByItensMercadoriaId(empresa.getMercadorias().get(0).getId()));
+        assertFalse(vendaRepositorio.existsByItensMercadoriaId(semVenda.getId()));
+    }
+
+    @Test
+    @DisplayName("excluir a venda apaga os itens dela e mantem a mercadoria")
+    void excluirVendaApagaItens() {
+        Usuario cliente = usuarioSimples("Cliente", PerfilUsuario.CLIENTE);
+        Veiculo carro = veiculo(cliente, "ABC1D23");
+        Usuario funcionario = usuarioSimples("Funcionario", PerfilUsuario.FUNCIONARIO);
+        repositorio.save(cliente);
+        repositorio.save(funcionario);
+        Empresa empresa = empresaRepositorio.saveAndFlush(empresaCom(cliente, funcionario, carro, "V1"));
+        gerenciador.clear();
+
+        Empresa lida = empresaRepositorio.findById(empresa.getId()).orElseThrow();
+        lida.getVendas().clear();
+        empresaRepositorio.flush();
+        gerenciador.clear();
+
+        assertEquals(0, contar("venda"));
+        assertEquals(0, contar("item_venda"));
+        assertEquals(1, contar("mercadoria"));
+    }
+
+    @Test
+    @DisplayName("editar a mercadoria nao sobrescreve o estoque baixado por outra venda depois da leitura")
+    void edicaoNaoSobrescreveEstoque() {
+        Mercadoria roda = mercadoriaRepositorio.saveAndFlush(mercadoria());
+        gerenciador.clear();
+
+        Mercadoria lida = mercadoriaRepositorio.findById(roda.getId()).orElseThrow();
+        assertEquals(10L, lida.getQuantidade());
+        mercadoriaRepositorio.baixarEstoque(roda.getId(), 4L);
+        lida.setNome("Roda nova");
+        mercadoriaRepositorio.flush();
+        gerenciador.clear();
+
+        Mercadoria depois = mercadoriaRepositorio.findById(roda.getId()).orElseThrow();
+        assertEquals("Roda nova", depois.getNome());
+        assertEquals(6L, depois.getQuantidade());
+    }
+
+    @Test
+    @DisplayName("alterar a quantidade da mercadoria continua gravando o novo estoque")
+    void edicaoDaQuantidadeGrava() {
+        Mercadoria roda = mercadoriaRepositorio.saveAndFlush(mercadoria());
+        gerenciador.clear();
+
+        Mercadoria lida = mercadoriaRepositorio.findById(roda.getId()).orElseThrow();
+        lida.setQuantidade(50);
+        mercadoriaRepositorio.flush();
+        gerenciador.clear();
+
+        assertEquals(50L, mercadoriaRepositorio.findById(roda.getId()).orElseThrow().getQuantidade());
+    }
+
+    @Test
+    @DisplayName("consultas de venda por servico, cliente e funcionario")
+    void consultasDaVenda() {
+        Usuario cliente = usuarioSimples("Cliente", PerfilUsuario.CLIENTE);
+        Veiculo carro = veiculo(cliente, "ABC1D23");
+        Usuario funcionario = usuarioSimples("Funcionario", PerfilUsuario.FUNCIONARIO);
+        Usuario outro = usuarioSimples("Outro", PerfilUsuario.CLIENTE);
+        repositorio.save(cliente);
+        repositorio.save(funcionario);
+        repositorio.save(outro);
+        Empresa empresa = empresaRepositorio.saveAndFlush(empresaCom(cliente, funcionario, carro, "V1"));
+
+        assertTrue(vendaRepositorio.existsByItensServicoServicoId(empresa.getServicos().get(0).getId()));
+        assertFalse(vendaRepositorio.existsByItensServicoServicoId(9999L));
+        assertTrue(vendaRepositorio.existsByClienteId(cliente.getId()));
+        assertFalse(vendaRepositorio.existsByClienteId(outro.getId()));
+        assertTrue(vendaRepositorio.existsByFuncionarioId(funcionario.getId()));
+        assertFalse(vendaRepositorio.existsByFuncionarioId(cliente.getId()));
+    }
+
+    @Test
+    @DisplayName("Venda.getMercadorias e getServicos trazem as listas do diagrama a partir dos itens")
+    void listasDoDiagrama() {
+        Usuario cliente = usuarioSimples("Cliente", PerfilUsuario.CLIENTE);
+        Veiculo carro = veiculo(cliente, "ABC1D23");
+        Usuario funcionario = usuarioSimples("Funcionario", PerfilUsuario.FUNCIONARIO);
+        repositorio.save(cliente);
+        repositorio.save(funcionario);
+        Empresa empresa = empresaRepositorio.saveAndFlush(empresaCom(cliente, funcionario, carro, "V1"));
+        gerenciador.clear();
+
+        Venda venda = vendaRepositorio.findById(empresa.getVendas().get(0).getId()).orElseThrow();
+
+        assertEquals("Roda", venda.getMercadorias().get(0).getNome());
+        assertEquals("Alinhamento", venda.getServicos().get(0).getNome());
     }
 }

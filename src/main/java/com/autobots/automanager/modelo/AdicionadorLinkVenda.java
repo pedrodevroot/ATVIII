@@ -12,7 +12,7 @@ import com.autobots.automanager.controles.ServicoControle;
 import com.autobots.automanager.controles.UsuarioControle;
 import com.autobots.automanager.controles.VeiculoControle;
 import com.autobots.automanager.controles.VendaControle;
-import com.autobots.automanager.dtos.MercadoriaDto;
+import com.autobots.automanager.dtos.ItemVendaDto;
 import com.autobots.automanager.dtos.ServicoDto;
 import com.autobots.automanager.dtos.VendaRespostaDto;
 
@@ -36,8 +36,8 @@ public class AdicionadorLinkVenda implements AdicionadorLink<VendaRespostaDto> {
 		if (objeto.getVeiculoId() != null) {
 			objeto.add(linkTo(methodOn(VeiculoControle.class).obterVeiculo(objeto.getVeiculoId())).withRel("veiculo"));
 		}
-		for (MercadoriaDto mercadoria : objeto.getMercadorias()) {
-			mercadoria.add(linkTo(methodOn(MercadoriaControle.class).obterMercadoria(mercadoria.getId())).withSelfRel());
+		for (ItemVendaDto item : objeto.getItens()) {
+			item.add(linkTo(methodOn(MercadoriaControle.class).obterMercadoria(item.getMercadoriaId())).withRel("mercadoria"));
 		}
 		for (ServicoDto servico : objeto.getServicos()) {
 			servico.add(linkTo(methodOn(ServicoControle.class).obterServico(servico.getId())).withSelfRel());
