@@ -1,11 +1,10 @@
-name: autobots
+name: autobots-atviii
 
 services:
 
   # Banco de dados compartilhado pelos microsservicos do AutoBots.
   postgres:
     image: postgres:16-alpine
-    container_name: autobots-postgres
     environment:
       POSTGRES_DB: autobots
       POSTGRES_USER: autobots
@@ -25,7 +24,6 @@ services:
   automanager:
     build: .
     image: autobots/automanager:1.0
-    container_name: autobots-automanager
     environment:
       DB_HOST: postgres
       DB_PORT: 5432

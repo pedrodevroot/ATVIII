@@ -62,11 +62,9 @@ O comando sobe dois containers: o PostgreSQL e o microsserviço. Na primeira
 subida, os [dados de demonstração](#dados-de-demonstração) são cadastrados
 automaticamente.
 
-> **Já executou a ATVII ou uma versão anterior desta atividade nesta máquina?**
-> Todas usam o mesmo volume do banco, e o esquema antigo não é compatível com o
-> modelo atual. Antes do `up`, apague esse banco e o container antigo com
-> `docker compose down -v --remove-orphans`.
-> O comando remove de vez os dados que estiverem nele.
+> **A ATVII está rodando nesta máquina?** O banco desta atividade é separado, mas as
+> duas usam as mesmas portas. Antes do `up`, pare a ATVII com `docker compose down`
+> na pasta dela.
 
 ### Conferir se subiu
 
